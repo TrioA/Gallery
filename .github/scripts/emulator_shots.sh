@@ -17,7 +17,24 @@ done
 adb shell appops set --uid $PKG MANAGE_EXTERNAL_STORAGE allow
 sleep 5
 
+dismiss_anr() {
+  adb shell uiautomator dump /sdcard/ui.xml >/dev/null; adb pull /sdcard/ui.xml /tmp/ui.xml >/dev/null
+  if grep -q "isn't responding" /tmp/ui.xml; then tap_raw Wait; fi
+}
+tap_raw() {
+  XY=$(python3 - "$1" <<'PY'
+import sys,re,xml.etree.ElementTree as ET
+t=sys.argv[1]
+for n in ET.parse('/tmp/ui.xml').iter('node'):
+    if n.get('text')==t:
+        m=re.findall(r'\d+',n.get('bounds'));x1,y1,x2,y2=map(int,m)
+        print((x1+x2)//2,(y1+y2)//2);break
+PY
+)
+  [ -n "$XY" ] && adb shell input tap $XY
+}
 tap_text() {
+  dismiss_anr
   adb shell uiautomator dump /sdcard/ui.xml >/dev/null
   adb pull /sdcard/ui.xml /tmp/ui.xml >/dev/null
   XY=$(python3 - "$1" <<'PY'
