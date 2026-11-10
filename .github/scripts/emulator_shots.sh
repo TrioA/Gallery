@@ -58,7 +58,7 @@ def s(h):
     return v-(1<<32) if v>=(1<<31) else v
 t,b,p=[s(a) for a in sys.argv[1:4]]
 print('<?xml version="1.0" encoding="utf-8" standalone="yes" ?>\n<map>')
-for k,v in (('text_color',t),('background_color',b),('primary_color_2',p),('accent_color',p),('app_icon_color',p)):
+for k,v in (('text_color',t),('background_color',b),('primary_color_2',p),('accent_color',p)):
     print(f'<int name="{k}" value="{v}" />')
 print('<boolean name="is_using_system_theme" value="false" />\n<boolean name="is_global_theme_enabled" value="false" />\n</map>')
 PY
@@ -72,7 +72,8 @@ shoot_theme() {
   adb shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n $PKG/org.fossify.gallery.activities.SplashActivity.Green
   sleep 12
   COMP=$(adb shell cmd package resolve-activity --brief -c android.intent.category.LAUNCHER $PKG | tail -1 | tr -d '\r')
-  adb shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n "$COMP"
+  echo "resolved launcher: $COMP"
+  case "$COMP" in */*) adb shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n "$COMP";; *) adb shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n $PKG/org.fossify.gallery.activities.SplashActivity.Green;; esac
   sleep 10
   adb logcat -d -t 400 > shots/${NAME}_log.txt || true
   adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumed' > shots/${NAME}_top.txt || true
