@@ -69,12 +69,9 @@ jobs:
                   echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
                   sudo udevadm control --reload-rules
                   sudo udevadm trigger --name-match=kvm
+            - uses: actions/checkout@v4
             - name: Make test photos
-              run: |
-                  mkdir -p photos && cd photos
-                  for i in 1 2 3 4 5 6; do
-                    convert -size 800x600 xc:"rgb($((i*40)),$((255-i*30)),120)" -gravity center -fill white -pointsize 80 -annotate 0 "Test $i" img_$i.jpg
-                  done
+              run: python3 .github/scripts/make_photos.py
             - name: Run on emulator and take screenshots
               uses: reactivecircus/android-emulator-runner@v2
               with:

@@ -5,9 +5,9 @@ APK=$(ls apk/*debug.apk | head -1)
 PKG=org.fossify.gallery.debug
 adb install -r "$APK"
 adb shell mkdir -p /sdcard/DCIM/Camera /sdcard/Pictures/Trips
-for i in 1 2 3; do adb push photos/img_$i.jpg /sdcard/DCIM/Camera/; done
-for i in 4 5 6; do adb push photos/img_$i.jpg /sdcard/Pictures/Trips/; done
-for f in /sdcard/DCIM/Camera/*.jpg /sdcard/Pictures/Trips/*.jpg; do
+for i in 1 2 3; do adb push photos/img_$i.png /sdcard/DCIM/Camera/; done
+for i in 4 5 6; do adb push photos/img_$i.png /sdcard/Pictures/Trips/; done
+for f in /sdcard/DCIM/Camera/*.png /sdcard/Pictures/Trips/*.png; do
   adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "file://$f" >/dev/null
 done
 for p in android.permission.READ_MEDIA_IMAGES android.permission.READ_MEDIA_VIDEO android.permission.POST_NOTIFICATIONS; do
