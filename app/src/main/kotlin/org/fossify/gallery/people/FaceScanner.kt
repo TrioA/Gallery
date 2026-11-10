@@ -68,7 +68,6 @@ object FaceScanner {
         try {
             val store = PeopleStore.get(context)
             val pending = mutableListOf<Item>()
-            val allPaths = HashSet<String>()
             val projection = arrayOf(MediaStore.Images.Media._ID, MediaStore.Images.Media.DATA, MediaStore.Images.Media.DATE_MODIFIED)
             context.contentResolver.query(
                 MediaStore.Images.Media.EXTERNAL_CONTENT_URI, projection, null, null,
@@ -76,12 +75,10 @@ object FaceScanner {
             )?.use { c ->
                 while (c.moveToNext()) {
                     val path = c.getString(1) ?: continue
-                    allPaths.add(path)
                     val item = Item(c.getLong(0), path, c.getLong(2))
                     if (!store.isScanned(item.path, item.mtime)) pending.add(item)
                 }
             }
-            if (allPaths.size > 0) store.pruneMissing(allPaths)
             total = pending.size
             notifyChanged()
             if (pending.isEmpty()) return
@@ -94,7 +91,14 @@ object FaceScanner {
                 try {
                     val bmp = decode(context, item.id)
                     if (bmp != null) {
+                        // Changed photo: keep what the user confirmed, redo only the guesses.
+                        val keep = store.confirmedEmbeddings(item.path)
+                        if (store.dropGuessesOfPath(item.path)) {
+                            centroids.clear()
+                            centroids.addAll(store.loadCentroids())
+                        }
                         for (f in engine.process(bmp)) {
+                            if (keep.any { FaceMath.dot(it, f.embedding) >= 0.6f }) { found++; continue }
                             assign(store, centroids, item.path, f)
                             found++
                         }

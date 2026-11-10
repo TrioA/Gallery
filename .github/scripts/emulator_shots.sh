@@ -137,6 +137,18 @@ shoot_theme() {
   tap_text "Buzz"; sleep 4; adb exec-out screencap -p > shots/${NAME}_18b_buzz_page.png
   tap_text "Link contact"; sleep 4; adb exec-out screencap -p > shots/${NAME}_19_contact_picker.png
   adb shell dumpsys activity activities | grep -E 'topResumedActivity' > shots/${NAME}_top_contact.txt || true
+  # photo permission revoked then restored: people records must survive untouched
+  adb shell am force-stop $PKG
+  adb shell pm revoke $PKG android.permission.READ_MEDIA_IMAGES
+  adb shell appops set --uid $PKG MANAGE_EXTERNAL_STORAGE deny
+  adb shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n $PKG/org.fossify.gallery.activities.SplashActivity.Green >/dev/null; sleep 6
+  adb exec-out screencap -p > shots/${NAME}_20_perm_revoked_start.png
+  adb shell am start -n $PKG/org.fossify.gallery.activities.PeopleActivity >/dev/null 2>&1; sleep 5; adb exec-out screencap -p > shots/${NAME}_21_perm_revoked_people.png
+  adb shell am force-stop $PKG
+  adb shell pm grant $PKG android.permission.READ_MEDIA_IMAGES
+  adb shell appops set --uid $PKG MANAGE_EXTERNAL_STORAGE allow
+  adb shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n $PKG/org.fossify.gallery.activities.SplashActivity.Green >/dev/null; sleep 6
+  tap_text People; sleep 5; adb exec-out screencap -p > shots/${NAME}_22_perm_restored_people.png
   adb shell 'md5sum /sdcard/Pictures/People/*.jpg /sdcard/Pictures/Family/*.png /sdcard/DCIM/Camera/*.png' > shots/${NAME}_md5_after.txt; grep -v extra_ shots/${NAME}_md5_after.txt | diff - shots/md5_before.txt > shots/${NAME}_md5_diff.txt && echo unchanged >> shots/${NAME}_md5_diff.txt
   adb logcat -d -s FaceScan:I > shots/${NAME}_facescan.txt || true
   adb logcat -d -s AndroidRuntime:E > shots/${NAME}_rt.txt || true

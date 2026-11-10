@@ -13,6 +13,7 @@ import android.widget.ImageView
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
+import java.io.File
 import org.fossify.commons.extensions.getContrastColor
 import org.fossify.commons.extensions.getProperPrimaryColor
 import org.fossify.commons.extensions.getProperTextColor
@@ -71,7 +72,8 @@ class PersonActivity : SimpleActivity() {
         binding.personToolbar.title = p.displayName()
         binding.personInfo.text = "${p.faceCount} faces" +
             (if (p.contactName.isNotBlank()) ", linked to contact ${p.contactName}" else "")
-        paths = store.pathsOfPerson(personId)
+        // Photos we cannot open right now (permission, storage) are hidden, not forgotten.
+        paths = store.pathsOfPerson(personId).filter { File(it).exists() }
         binding.personGrid.adapter?.notifyDataSetChanged()
     }
 
