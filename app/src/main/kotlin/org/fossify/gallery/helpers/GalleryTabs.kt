@@ -3,6 +3,8 @@ package org.fossify.gallery.helpers
 import android.app.Activity
 import android.content.Intent
 import android.content.res.ColorStateList
+import android.graphics.drawable.GradientDrawable
+import androidx.core.graphics.ColorUtils
 import android.view.View
 import android.view.ViewGroup
 import com.google.android.material.bottomnavigation.BottomNavigationView
@@ -38,7 +40,20 @@ object GalleryTabs {
             arrayOf(intArrayOf(android.R.attr.state_selected), intArrayOf()),
             intArrayOf(primary, text)
         )
-        nav.setBackgroundColor(activity.getProperBackgroundColor())
+        val bg = activity.getProperBackgroundColor()
+        val dp = activity.resources.displayMetrics.density
+        // Floating pill: background nudged toward the text color so it reads on any theme.
+        val pill = GradientDrawable().apply {
+            cornerRadius = 32 * dp
+            setColor(ColorUtils.blendARGB(bg, text, 0.10f))
+        }
+        nav.background = pill
+        nav.elevation = 10 * dp
+        (nav.layoutParams as? ViewGroup.MarginLayoutParams)?.let {
+            val side = (16 * dp).toInt()
+            it.setMargins(side, 0, side, (8 * dp).toInt())
+            nav.layoutParams = it
+        }
         nav.itemIconTintList = tint
         nav.itemTextColor = tint
         nav.itemActiveIndicatorColor = ColorStateList.valueOf((primary and 0x00FFFFFF) or 0x33000000)
@@ -50,7 +65,7 @@ object GalleryTabs {
             true
         }
 
-        nav.post { setBottomMargin(content, nav.height) }
+        nav.post { setBottomMargin(content, nav.height + (8 * dp).toInt()) }
     }
 
     private fun open(activity: Activity, tab: Int) {
