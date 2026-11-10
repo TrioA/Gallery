@@ -405,8 +405,16 @@ for f in $(adb shell 'ls /sdcard/Pictures/Regress/ 2>/dev/null' | tr -d '\r'); d
 adb shell rm -rf /sdcard/Pictures/Regress
 adb shell am force-stop $PKG
 
+wait_faces() { for i in $(seq 1 90); do sleep 2; dump; if python3 - <<'PY'
+import sys,re,xml.etree.ElementTree as ET
+ts=[(n.get('text') or '') for n in ET.parse('/tmp/ui.xml').iter('node')]
+ok=any(re.match(r'[1-9][0-9]* people, [1-9][0-9]* faces in',t) for t in ts) and not any(t.startswith('Scanning') for t in ts)
+sys.exit(0 if ok else 1)
+PY
+then return 0; fi; done; return 1; }
 # 7g. controlled repro of the wrong-merge report: one deliberately WRONG confirmed correction, then more copies of the same people
-wipedb; open_people; sleep 3; (has "Scan photos" && tap_text "Scan photos"); wait_scan; sleep 2
+wipedb; open_people; sleep 3; (has "Scan photos" && tap_text "Scan photos"); wait_faces && echo "PASS: 7g clean scan produced faces" >> $R || echo "FAIL: 7g clean scan produced no faces (scan state prerequisite)" >> $R
+sleep 2; adb shell am force-stop $PKG; sleep 1
 dbsnap g_clean > /dev/null
 open_photo armstrong_3.jpg; sheet; tap_text "Wrong person"; sleep 2; if has "Person 2"; then tap_text "Person 2"; else tap_text "Person 1"; fi; sleep 3; shot 22a_wrong_move
 adb shell am force-stop $PKG; sleep 1
@@ -415,7 +423,15 @@ for k in 1 2 3 4 5 6; do for f in armstrong_1 armstrong_2 armstrong_3 armstrong_
   adb push faces/$f.jpg /sdcard/Pictures/People/extra_${k}_$f.jpg >/dev/null
   adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "file:///sdcard/Pictures/People/extra_${k}_$f.jpg" >/dev/null
 done; done
-open_people; sleep 3; (has "Scan photos" && tap_text "Scan photos"); wait_scan; shot 22b_after_extras
+open_people; sleep 3; (has "Scan photos" && tap_text "Scan photos"); wait_faces && echo "PASS: 7g rescan with extras finished" >> $R || echo "FAIL: 7g rescan did not finish" >> $R
+shot 22b_after_extras
+if has "Suggest merges"; then tap_text "Suggest merges"; sleep 3; shot 22c_suggest; dump; python3 - >> $R <<'PY'
+import xml.etree.ElementTree as ET
+for n in ET.parse('/tmp/ui.xml').iter('node'):
+    t=n.get('text') or ''
+    if t.startswith('Suggestion') or t.startswith('No likely'): print("SUGGEST status:",t)
+PY
+fi
 adb shell am force-stop $PKG; sleep 1; dbsnap g_after > /dev/null
 python3 - shots/db_g_clean/people.db shots/db_g_contam/people.db shots/db_g_after/people.db >> $R <<'PY'
 import sqlite3,sys,os,struct,math
