@@ -48,7 +48,7 @@ class FaceEngine(context: Context, private val minConfidence: Float = 0.6f) : Cl
     private fun fullRange(): FaceDetector = fullRangeDetector ?: FaceDetector.createFromOptions(appContext,
         FaceDetector.FaceDetectorOptions.builder()
             .setBaseOptions(BaseOptions.builder().setModelAssetPath(FULL_RANGE_ASSET).build())
-            .setMinDetectionConfidence(maxOf(0.6f, minConfidence))
+            .setMinDetectionConfidence(TILE_MIN_SCORE)
             .setRunningMode(RunningMode.IMAGE)
             .build()).also { fullRangeDetector = it }
 
@@ -160,15 +160,17 @@ class FaceEngine(context: Context, private val minConfidence: Float = 0.6f) : Cl
             keep.add(c)
         }
         Log.i("FaceScan", "tiles=$tiles tile_ms=${SystemClock.elapsedRealtime() - t0} raw=${all.size} kept=${keep.size}")
-        // Preserve every existing primary result and its landmarks. Only empty photos get the
-        // full-range model, so this cannot change the alignment/embeddings of faces already found.
+        // Preserve every primary result and its landmarks. Automatic scans only fall back for
+        // empty photos; explicit Look again is allowed to search for smaller companions too.
         // Old zero-face scan records stay intact; use Look again for those, or the existing developer reset.
-        if (keep.isEmpty() && allowFallback && fullRangeEnabled && !interrupted && !shouldStop()) {
+        if ((keep.isEmpty() || minConfidence < 0.6f) && allowFallback && fullRangeEnabled && !interrupted && !shouldStop()) {
             val start = SystemClock.elapsedRealtime()
             Log.i("FaceScan", "full_range_fallback_start")
             val rescued = detectAll(bitmap, fullRange(), false)
             Log.i("FaceScan", "full_range_fallback faces=${rescued.size} ms=${SystemClock.elapsedRealtime() - start}")
-            return rescued
+            // Explicit Look again may add small companions even if the primary found a large face.
+            // Keep all primary coordinates/landmarks; only append non-overlapping full-range detections.
+            for (c in rescued) if (keep.none { it.duplicateOf(c) }) keep.add(c)
         }
         return keep
     }
