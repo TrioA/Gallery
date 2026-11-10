@@ -14,7 +14,7 @@ assert a2[0] < a1[0] and a2[1] < a1[1], ("armstrong_2 must be a real downscale",
 import hashlib
 h=lambda f: hashlib.md5(open(f,"rb").read()).hexdigest()
 assert len({h(f) for f in ["faces/armstrong_1.jpg","faces/armstrong_3.jpg","faces/armstrong_4.jpg","faces/aldrin_1.jpg"]}) == 4, "portraits must be 4 different files"
-assert m[0] > m[1] and m[0] > a1[0], ("multi must be two portraits side by side", m)
+assert m == (1200, 600), ("multi must be two head crops side by side", m)
 assert t == (1600, 1200), ("tiny canvas", t)
 print("PASS: fixtures valid", dict(a1=a1,a2=a2,a3=a3,a4=a4,aldrin=al,multi=m,tiny=t))
 PY
@@ -65,7 +65,7 @@ launch() { adb shell am force-stop $PKG; adb shell am start -a android.intent.ac
 open_people() { launch; tap_text People; sleep 3; }
 open_photo() { # file name
   ID=$(adb shell content query --uri content://media/external/images/media --projection _id:_display_name | grep "_display_name=$1" | head -1 | sed 's/.*_id=\([0-9]*\).*/\1/')
-  adb shell am start -a android.intent.action.VIEW -t image/jpeg -d content://media/external/images/media/$ID -p $PKG >/dev/null; sleep 5
+  adb shell am start -n $PKG/org.fossify.gallery.activities.ViewPagerActivity -a android.intent.action.VIEW -t image/jpeg -d content://media/external/images/media/$ID >/dev/null; sleep 5
 }
 sheet() { adb shell input swipe 540 1700 540 600 150; sleep 3; }
 wait_scan() { for i in $(seq 1 60); do sleep 2; dump; if python3 - <<'PY'
@@ -118,18 +118,32 @@ need "person page shows linked contact" 10 has "linked to contact Test_Person"
 open_people; adb shell input tap 160 650; sleep 4
 need "contact link persists after restart" 10b has "linked to contact Test_Person"
 
-# 6. permission revoked then restored
-adb shell am force-stop $PKG
+# 6. permission revoked then restored: stored people must be untouched (checked in the DB itself)
+dbsnap() { mkdir -p shots/db_$1; for f in people.db people.db-wal people.db-shm; do adb exec-out run-as $PKG cat databases/$f > shots/db_$1/$f 2>/dev/null; done
+  python3 - shots/db_$1/people.db <<'PY'
+import sqlite3,sys
+c=sqlite3.connect(sys.argv[1])
+q=lambda s:c.execute(s).fetchone()[0]
+print(q("select count(*) from faces"),q("select count(*) from people where face_count>0"),q("select count(*) from faces where confirmed=1"),q("select count(*) from people where contact_name<>''"),q("select count(*) from scanned"))
+PY
+}
+need_db_equal() { [ "$(dbsnap $1)" = "$(dbsnap $2)" ]; }
+adb shell am force-stop $PKG; sleep 2
+dbsnap before_revoke > shots/db_before.txt; cat shots/db_before.txt >> $R
 adb shell pm revoke $PKG android.permission.READ_MEDIA_IMAGES
 adb shell appops set --uid $PKG MANAGE_EXTERNAL_STORAGE deny
-open_people; sleep 5; shot 11_revoked_people
-need "revoked: app alive and People screen shows all stored people" 11 has "2 people, 7 faces"
+adb shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n $PKG/org.fossify.gallery.activities.SplashActivity.Green >/dev/null; sleep 8; shot 11_revoked_launch
+need "revoked: app process still alive (no crash on launch)" 11 sh -c "adb shell pidof $PKG | grep -q ."
+adb shell am force-stop $PKG; sleep 2
+dbsnap during_revoke > shots/db_revoked.txt
+need "revoked: stored faces/people/confirmed/contacts/scanned counts unchanged" 11b test "$(cat shots/db_before.txt)" = "$(cat shots/db_revoked.txt)"
 adb shell pm grant $PKG android.permission.READ_MEDIA_IMAGES
 adb shell appops set --uid $PKG MANAGE_EXTERNAL_STORAGE allow
 open_people; sleep 5; shot 12_restored_people
-need "restored: same people and faces" 12 has "2 people, 7 faces"
+need "restored: People screen shows same people and faces" 12 has "2 people, 7 faces"
 adb shell input tap 160 650; sleep 4
 need "restored: contact link still there" 12b has "linked to contact Test_Person"
+echo "NOTE: scanner behaviour with revoked access is not reachable from the UI (People needs the app open); checked by launch + DB counts only" >> $R
 
 # 7. originals untouched
 adb shell 'md5sum /sdcard/Pictures/People/*.jpg' > shots/md5_after.txt

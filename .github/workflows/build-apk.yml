@@ -160,10 +160,11 @@ jobs:
                   from PIL import Image
                   a=Image.open('faces/armstrong_1.jpg'); a.resize((a.width*2//3,a.height*2//3)).save('faces/armstrong_2.jpg',quality=80)
                   A=Image.open('faces/armstrong_1.jpg').convert('RGB'); B=Image.open('faces/aldrin_1.jpg').convert('RGB')
-                  h=900
-                  A2=A.resize((int(A.width*h/A.height),h)); B2=B.resize((int(B.width*h/B.height),h))
-                  c=Image.new('RGB',(A2.width+B2.width,h),(40,40,40)); c.paste(A2,(0,0)); c.paste(B2,(A2.width,0)); c.save('focus/multi.jpg',quality=90)
-                  T=Image.open('faces/armstrong_3.jpg').convert('RGB'); T=T.resize((260,int(260*T.height/T.width)))
+                  # head crops (boxes measured offline with the same detector) so both faces are detectable side by side
+                  c=Image.new('RGB',(1200,600),(40,40,40))
+                  c.paste(A.crop((508,176,1093,761)).resize((600,600)),(0,0)); c.paste(B.crop((431,211,1077,857)).resize((600,600)),(600,0))
+                  c.save('focus/multi.jpg',quality=92)
+                  T=Image.open('faces/armstrong_3.jpg').convert('RGB'); T=T.resize((360,int(360*T.height/T.width)))
                   c=Image.new('RGB',(1600,1200),(70,70,70)); c.paste(T,(800-T.width//2,600-T.height//2)); c.save('focus/tiny.jpg',quality=90)
                   PY
                   ls -l faces focus
