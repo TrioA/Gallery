@@ -73,7 +73,7 @@ jobs:
               run: |
                   mkdir -p photos && cd photos
                   for i in 1 2 3 4 5 6; do
-                    convert -size 800x600 gradient:"hsl($((i*50)),80%,60%)-hsl($((i*50+80)),70%,30%)" -gravity center -pointsize 60 -annotate 0 "Test $i" img_$i.jpg
+                    convert -size 800x600 xc:"rgb($((i*40)),$((255-i*30)),120)" -gravity center -fill white -pointsize 80 -annotate 0 "Test $i" img_$i.jpg
                   done
             - name: Run on emulator and take screenshots
               uses: reactivecircus/android-emulator-runner@v2
