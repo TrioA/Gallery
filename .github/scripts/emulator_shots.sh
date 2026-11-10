@@ -10,6 +10,7 @@ for i in 5 6 7 8; do adb push photos/img_$i.png /sdcard/Pictures/Trips/; done
 for i in 9 10 11 12; do adb push photos/img_$i.png /sdcard/Pictures/Family/; done
 adb shell mkdir -p /sdcard/Pictures/People
 for f in faces/*.jpg; do adb push $f /sdcard/Pictures/People/; done
+adb shell 'md5sum /sdcard/Pictures/People/*.jpg /sdcard/Pictures/Family/*.png /sdcard/DCIM/Camera/*.png' > shots/md5_before.txt
 for f in /sdcard/Pictures/People/*.jpg /sdcard/DCIM/Camera/*.png /sdcard/Pictures/Trips/*.png /sdcard/Pictures/Family/*.png; do
   adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "file://$f" >/dev/null
 done
@@ -129,9 +130,10 @@ shoot_theme() {
   tap_text "Scan photos"; sleep 40; adb exec-out screencap -p > shots/${NAME}_18_resumed_done.png
   # contact picker check with a synthetic contact in this disposable emulator
   adb shell content insert --uri content://com.android.contacts/raw_contacts --bind account_type:n: --bind account_name:n: >/dev/null 2>&1 || true
-  tap_text "Person 1"; sleep 4
+  tap_text "Buzz"; sleep 4; adb exec-out screencap -p > shots/${NAME}_18b_buzz_page.png
   tap_text "Link contact"; sleep 4; adb exec-out screencap -p > shots/${NAME}_19_contact_picker.png
   adb shell dumpsys activity activities | grep -E 'topResumedActivity' > shots/${NAME}_top_contact.txt || true
+  adb shell 'md5sum /sdcard/Pictures/People/*.jpg /sdcard/Pictures/Family/*.png /sdcard/DCIM/Camera/*.png' > shots/${NAME}_md5_after.txt; grep -v extra_ shots/${NAME}_md5_after.txt | diff - shots/md5_before.txt > shots/${NAME}_md5_diff.txt && echo unchanged >> shots/${NAME}_md5_diff.txt
   adb logcat -d -s FaceScan:I > shots/${NAME}_facescan.txt || true
   adb logcat -d -s AndroidRuntime:E > shots/${NAME}_rt.txt || true
   adb logcat -d -b crash > shots/${NAME}_crash.txt || true

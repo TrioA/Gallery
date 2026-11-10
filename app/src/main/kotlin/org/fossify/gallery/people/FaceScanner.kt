@@ -44,7 +44,10 @@ object FaceScanner {
         done = 0
         total = 0
         notifyChanged()
-        Thread({ run(app) }, "face-scan").start()
+        Thread({
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND)
+            run(app)
+        }, "face-scan").start()
     }
 
     private class Item(val id: Long, val path: String, val mtime: Long)
