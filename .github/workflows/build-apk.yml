@@ -131,3 +131,56 @@ jobs:
                   name: emulator-screenshots
                   path: shots
                   retention-days: 5
+
+    emulator-focus:
+        needs: build
+        runs-on: ubuntu-latest
+        continue-on-error: true
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/download-artifact@v4
+              with:
+                  name: gallery-emulator-x86_64
+                  path: apk
+            - name: Enable KVM
+              run: |
+                  echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+                  sudo udevadm control --reload-rules
+                  sudo udevadm trigger --name-match=kvm
+            - name: Fetch public-domain portraits (NASA via Wikimedia Commons) and compose focus photos
+              run: |
+                  mkdir -p faces focus
+                  UA="TrioA-Gallery-CI/1.0 (personal fork test)"
+                  curl -fL --retry 3 -A "$UA" -o faces/armstrong_1.jpg "https://commons.wikimedia.org/wiki/Special:FilePath/Neil_Armstrong_pose.jpg?width=1200"
+                  curl -fL --retry 3 -A "$UA" -o faces/aldrin_1.jpg "https://commons.wikimedia.org/wiki/Special:FilePath/Buzz_Aldrin.jpg?width=1200"
+                  curl -fL --retry 3 -A "$UA" -o faces/armstrong_3.jpg "https://commons.wikimedia.org/wiki/Special:FilePath/Astronaut_Neil_A._Armstrong_(1964).jpg?width=1200"
+                  curl -fL --retry 3 -A "$UA" -o faces/armstrong_4.jpg "https://commons.wikimedia.org/wiki/Special:FilePath/Neil_Armstrong_1958_portrait_cropped.jpg?width=1200"
+                  python3 - <<'PY'
+                  from PIL import Image
+                  a=Image.open('faces/armstrong_1.jpg'); a.resize((a.width*2//3,a.height*2//3)).save('faces/armstrong_2.jpg',quality=80)
+                  A=Image.open('faces/armstrong_1.jpg').convert('RGB'); B=Image.open('faces/aldrin_1.jpg').convert('RGB')
+                  h=900
+                  A2=A.resize((int(A.width*h/A.height),h)); B2=B.resize((int(B.width*h/B.height),h))
+                  c=Image.new('RGB',(A2.width+B2.width,h),(40,40,40)); c.paste(A2,(0,0)); c.paste(B2,(A2.width,0)); c.save('focus/multi.jpg',quality=90)
+                  T=Image.open('faces/armstrong_3.jpg').convert('RGB'); T=T.resize((260,int(260*T.height/T.width)))
+                  c=Image.new('RGB',(1600,1200),(70,70,70)); c.paste(T,(800-T.width//2,600-T.height//2)); c.save('focus/tiny.jpg',quality=90)
+                  PY
+                  ls -l faces focus
+            - name: Focused emulator checks
+              uses: reactivecircus/android-emulator-runner@v2
+              with:
+                  api-level: 34
+                  arch: x86_64
+                  target: default
+                  profile: pixel_6
+                  disable-animations: true
+                  ram-size: 4096M
+                  heap-size: 576M
+                  emulator-boot-timeout: 900
+                  script: bash .github/scripts/emulator_focus.sh
+            - uses: actions/upload-artifact@v4
+              if: always()
+              with:
+                  name: focus-results
+                  path: shots
+                  retention-days: 5
