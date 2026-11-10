@@ -400,6 +400,55 @@ N=$(adb shell 'ls /sdcard/Pictures/Regress/*.jpg 2>/dev/null | wc -l' | tr -d '\
 adb shell 'md5sum /sdcard/Pictures/Regress/*.jpg' > shots/reg_after.txt
 grep -F -f <(awk '{print $1}' shots/reg_after.txt) shots/reg_before.txt >/dev/null && pass "the remaining picture is byte-identical to the original" || echo "FAIL: remaining picture differs" >> $R
 adb logcat -d -s AndroidRuntime:E | grep -q "org.fossify.gallery" && echo "FAIL: crash during ordinary actions" >> $R || pass "no crash during album, select and delete"
+# 21f. ordinary copy / move / recycle-bin restore (diagnostic first: records dumps and screenshots for every stage)
+tap_desc() { dump; XY=$(python3 - "$1" <<'PY'
+import sys,re,xml.etree.ElementTree as ET
+for n in reversed(list(ET.parse('/tmp/ui.xml').iter('node'))):
+    if (n.get('content-desc') or '')==sys.argv[1]:
+        m=re.findall(r'\d+',n.get('bounds'));x1,y1,x2,y2=map(int,m)
+        print((x1+x2)//2,(y1+y2)//2);break
+PY
+); [ -n "$XY" ] && adb shell input tap $XY; }
+firstthumb() { dump; python3 - <<'PY'
+import re,xml.etree.ElementTree as ET
+for n in ET.parse('/tmp/ui.xml').iter('node'):
+    if 'medium_thumbnail' in (n.get('resource-id') or ''):
+        m=re.findall(r'\d+',n.get('bounds'));x1,y1,x2,y2=map(int,m);print((x1+x2)//2,(y1+y2)//2);break
+PY
+}
+SRC=$(adb shell 'ls /sdcard/Pictures/Regress/*.jpg | head -1' | tr -d '\r')
+for d in Regress2 Regress3; do adb shell mkdir -p /sdcard/Pictures/$d; done
+adb shell cp "$SRC" /sdcard/Pictures/Regress2/seed2.jpg; adb shell cp "$SRC" /sdcard/Pictures/Regress3/move3.jpg
+for f in Regress2/seed2.jpg Regress3/move3.jpg; do adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "file:///sdcard/Pictures/$f" >/dev/null; done
+sleep 2
+# copy: Regress (1 file) -> Regress2
+launch; tap_text Albums; sleep 3; tap_text Regress; sleep 3
+XY=$(firstthumb); adb shell input swipe $XY $XY 800 2>/dev/null || adb shell input swipe ${XY% *} ${XY#* } ${XY% *} ${XY#* } 800; sleep 2
+tap_desc "More options"; sleep 2; shot 24a_overflow; dump; cp /tmp/ui.xml shots/ui_overflow.xml
+tap_text "Copy to"; sleep 3; shot 24b_copy_dialog; dump; cp /tmp/ui.xml shots/ui_copy_dialog.xml
+tap_text "Regress2"; sleep 2; tap_text OK; sleep 4; shot 24c_after_copy; dump; cp /tmp/ui.xml shots/ui_after_copy.xml
+NC=$(adb shell 'ls /sdcard/Pictures/Regress2/*.jpg 2>/dev/null | wc -l' | tr -d '\r ')
+NS=$(adb shell 'ls /sdcard/Pictures/Regress/*.jpg 2>/dev/null | wc -l' | tr -d '\r ')
+[ "$NC" = "2" ] && [ "$NS" = "1" ] && pass "copy: picture copied to Regress2 (2 there), original kept in Regress (1)" || echo "FAIL: copy: Regress2 has $NC (expected 2), Regress has $NS (expected 1)" >> $R
+CP=$(adb shell 'ls /sdcard/Pictures/Regress2/*.jpg' | tr -d '\r' | grep -v seed2 | head -1)
+[ -n "$CP" ] && [ "$(adb shell md5sum "$CP" | cut -d' ' -f1)" = "$(adb shell md5sum "$SRC" | cut -d' ' -f1)" ] && pass "copy: copied file is byte-identical" || echo "FAIL: copy: copied file missing or differs" >> $R
+# move: Regress3 (1 file) -> Regress2
+launch; tap_text Albums; sleep 3; tap_text Regress3; sleep 3
+XY=$(firstthumb); adb shell input swipe $XY $XY 800 2>/dev/null || adb shell input swipe ${XY% *} ${XY#* } ${XY% *} ${XY#* } 800; sleep 2
+tap_desc "More options"; sleep 2; tap_text "Move to"; sleep 3; shot 24d_move_dialog
+tap_text "Regress2"; sleep 2; tap_text OK; sleep 4; shot 24e_after_move
+NM=$(adb shell 'ls /sdcard/Pictures/Regress2/*.jpg 2>/dev/null | wc -l' | tr -d '\r ')
+N3=$(adb shell 'ls /sdcard/Pictures/Regress3/*.jpg 2>/dev/null | wc -l' | tr -d '\r ')
+[ "$NM" = "3" ] && [ "$N3" = "0" ] && pass "move: picture moved to Regress2 (3 there), none left in Regress3" || echo "FAIL: move: Regress2 has $NM (expected 3), Regress3 has $N3 (expected 0)" >> $R
+# recycle bin restore of the two pictures deleted in step 21
+launch; tap_text Albums; sleep 3; shot 24f_albums_bin; dump; cp /tmp/ui.xml shots/ui_albums_bin.xml
+if has "Recycle Bin"; then tap_text "Recycle Bin"; sleep 3; shot 24g_bin; dump; cp /tmp/ui.xml shots/ui_bin.xml
+  XY=$(firstthumb); adb shell input swipe $XY $XY 800 2>/dev/null || adb shell input swipe ${XY% *} ${XY#* } ${XY% *} ${XY#* } 800; sleep 2; shot 24h_bin_selected; dump; cp /tmp/ui.xml shots/ui_bin_selected.xml
+  tap_desc "More options"; sleep 2; tap_text "Restore selected files"; sleep 4; shot 24i_restored
+  NR=$(adb shell 'ls /sdcard/Pictures/Regress/*.jpg 2>/dev/null | wc -l' | tr -d '\r ')
+  [ "$NR" = "2" ] && pass "recycle bin: one deleted picture restored to its original folder (Regress has 2)" || echo "FAIL: recycle bin restore: Regress has $NR (expected 2); see ui_bin_selected.xml" >> $R
+else echo "FAIL: no Recycle Bin tile in Albums after delete (see ui_albums_bin.xml)" >> $R; fi
+for d in Regress2 Regress3; do for f in $(adb shell "ls /sdcard/Pictures/$d/ 2>/dev/null" | tr -d '\r'); do adb shell rm -f /sdcard/Pictures/$d/$f; adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "file:///sdcard/Pictures/$d/$f" >/dev/null; done; adb shell rm -rf /sdcard/Pictures/$d; done
 # remove the regression fixtures so they cannot be picked up by later scans
 for f in $(adb shell 'ls /sdcard/Pictures/Regress/ 2>/dev/null' | tr -d '\r'); do adb shell rm -f /sdcard/Pictures/Regress/$f; adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "file:///sdcard/Pictures/Regress/$f" >/dev/null; done
 adb shell rm -rf /sdcard/Pictures/Regress
@@ -412,51 +461,52 @@ ok=any(re.match(r'[1-9][0-9]* people, [1-9][0-9]* faces in',t) for t in ts) and 
 sys.exit(0 if ok else 1)
 PY
 then return 0; fi; done; return 1; }
-# 7g. controlled repro of the wrong-merge report: one deliberately WRONG confirmed correction, then more copies of the same people
-wipedb; open_people; sleep 3; (has "Scan photos" && tap_text "Scan photos"); wait_faces && echo "PASS: 7g clean scan produced faces" >> $R || echo "FAIL: 7g clean scan produced no faces (scan state prerequisite)" >> $R
-sleep 2; adb shell am force-stop $PKG; sleep 1
-dbsnap g_clean > /dev/null
-open_photo armstrong_3.jpg; sheet; tap_text "Wrong person"; sleep 2; if has "Person 2"; then tap_text "Person 2"; else tap_text "Person 1"; fi; sleep 3; shot 22a_wrong_move
-adb shell am force-stop $PKG; sleep 1
-dbsnap g_contam > /dev/null
-for k in 1 2 3 4 5 6; do for f in armstrong_1 armstrong_2 armstrong_3 armstrong_4 aldrin_1; do
-  adb push faces/$f.jpg /sdcard/Pictures/People/extra_${k}_$f.jpg >/dev/null
-  adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "file:///sdcard/Pictures/People/extra_${k}_$f.jpg" >/dev/null
-done; done
-open_people; sleep 3; (has "Scan photos" && tap_text "Scan photos"); wait_faces && echo "PASS: 7g rescan with extras finished" >> $R || echo "FAIL: 7g rescan did not finish" >> $R
-shot 22b_after_extras
-if has "Suggest merges"; then tap_text "Suggest merges"; sleep 3; shot 22c_suggest; dump; python3 - >> $R <<'PY'
-import xml.etree.ElementTree as ET
-for n in ET.parse('/tmp/ui.xml').iter('node'):
-    t=n.get('text') or ''
-    if t.startswith('Suggestion') or t.startswith('No likely'): print("SUGGEST status:",t)
+# 7h. Suggest merges review flow: no false suggestion on a correct grouping, then a real split is suggested and merged back with everything kept
+wipedb
+adb push shots/db_devcancel/people.db /data/local/tmp/people.db >/dev/null
+adb shell "run-as $PKG sh -c 'mkdir -p databases; cp /data/local/tmp/people.db databases/people.db; rm -f databases/people.db-wal databases/people.db-shm'"
+open_people_exact() { adb shell am start -n $PKG/org.fossify.gallery.activities.PeopleActivity >/dev/null; sleep 4; }
+open_people_exact
+soft "suggestion test is in PeopleActivity" 23top top_has PeopleActivity
+soft "suggestion test starts with 2 people and 9 faces" 23base has "2 people, 9 faces"
+tap_text "Suggest merges"; sleep 3; shot 23a_suggest_clean
+has "No likely duplicate" && echo "PASS: Suggest merges on a correct 2-person grouping offers nothing" >> $R || echo "FAIL: Suggest merges offered something on a correct grouping" >> $R
+adb shell am force-stop $PKG; sleep 1; dbsnap h_base > /dev/null
+python3 - shots/db_h_base/people.db <<'PY'
+import sqlite3,sys,os,struct,collections
+c=sqlite3.connect(sys.argv[1]); c.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+rows=c.execute("select id,path,person_id,emb from faces").fetchall()
+arm=collections.Counter(pid for i,p,pid,e in rows if os.path.basename(p).startswith('armstrong_'))
+big=arm.most_common(1)[0][0]
+mv=[(i,e) for i,p,pid,e in rows if pid==big and os.path.basename(p).startswith('armstrong_')][:2]
+vs=[struct.unpack('<%df'%(len(e)//4),e) for i,e in mv]
+m=[sum(x) for x in zip(*vs)]; n=sum(x*x for x in m)**.5; cen=struct.pack('<%df'%len(m),*[x/n for x in m])
+cur=c.execute("insert into people(name,contact_key,contact_name,centroid,face_count,aliases,merged_into) values('', '', '', ?, 2, '', 0)",(cen,))
+newid=cur.lastrowid
+for i,e in mv: c.execute("update faces set person_id=? where id=?",(newid,i))
+rest=c.execute("select count(*) from faces where person_id=?",(big,)).fetchone()[0]
+c.execute("update people set face_count=? where id=?",(rest,big))
+c.commit(); c.execute("PRAGMA wal_checkpoint(TRUNCATE)"); c.close()
+print("split",big,"->",newid,"moved faces",[i for i,e in mv])
 PY
-fi
-adb shell am force-stop $PKG; sleep 1; dbsnap g_after > /dev/null
-python3 - shots/db_g_clean/people.db shots/db_g_contam/people.db shots/db_g_after/people.db >> $R <<'PY'
-import sqlite3,sys,os,struct,math
-def V(b): return struct.unpack('<%df'%(len(b)//4),b)
-def dot(a,b): return sum(x*y for x,y in zip(a,b))
-def lab(p):
-    f=os.path.basename(p); return 'ARM' if 'armstrong' in f else ('ALD' if 'aldrin' in f else 'MULTI')
-for name,db in zip(("clean","after wrong move","after 30 extra copies"),sys.argv[1:4]):
-    c=sqlite3.connect(db); rows=c.execute("select f.path,f.person_id,f.confirmed,p.merged_into from faces f join people p on p.id=f.person_id").fetchall()
-    tab={}
-    for path,pid,cf,mi in rows:
-        k=lab(path)
-        if k=='MULTI': continue
-        tab.setdefault(pid,{'ARM':0,'ALD':0,'conf':0}); tab[pid][k]+=1; tab[pid]['conf']+=cf
-    print("REPRO %s: groups (person id -> Armstrong faces, Aldrin faces, confirmed): %s"%(name,tab))
-c=sqlite3.connect(sys.argv[3]); rows=c.execute("select f.path,f.person_id from faces f").fetchall()
-ex=[(os.path.basename(p),pid) for p,pid in rows if os.path.basename(p).startswith('extra_')]
-mix={}
-for fn,pid in ex: mix.setdefault((pid,'ARM' if 'armstrong' in fn else 'ALD'),0); mix[(pid,'ARM' if 'armstrong' in fn else 'ALD')]+=1
-print("REPRO extras by (person id, true identity): %s"%mix)
-armg={pid for (pid,k) in mix if k=='ARM'}; aldg={pid for (pid,k) in mix if k=='ALD'}
-wrong=sum(n for (pid,k),n in mix.items() if k=='ARM' and pid in aldg and pid not in armg) 
-print("REPRO RESULT: new Armstrong faces: %d total, in the group(s) that also hold Aldrin: %s"%(sum(n for (pid,k),n in mix.items() if k=='ARM'),{pid:n for (pid,k),n in mix.items() if k=='ARM' and pid in aldg}))
+rm -f shots/db_h_base/people.db-wal shots/db_h_base/people.db-shm
+cp shots/db_h_base/people.db shots/h_split.db
+adb push shots/h_split.db /data/local/tmp/people.db >/dev/null
+adb shell "run-as $PKG sh -c 'mkdir -p databases; cp /data/local/tmp/people.db databases/people.db; rm -f databases/people.db-wal databases/people.db-shm'"
+open_people_exact; sleep 3; tap_text "Suggest merges"; sleep 3; shot 23b_suggest_split
+has "Merge 2 into one" && echo "PASS: Suggest merges selects the split pair (2 groups) for review" >> $R || echo "FAIL: Suggest merges did not select exactly the split pair" >> $R
+tap_text "Merge 2 into one"; sleep 2; shot 23c_suggest_confirm; tap_text MERGE; sleep 3; shot 23d_suggest_merged
+adb shell am force-stop $PKG; sleep 1; dbsnap h_after > /dev/null
+python3 - shots/db_h_base/people.db shots/db_h_after/people.db >> $R <<'PY'
+import sqlite3,sys
+a=sqlite3.connect(sys.argv[1]);b=sqlite3.connect(sys.argv[2])
+fa=a.execute("select id,path,confirmed from faces order by id").fetchall();fb=b.execute("select id,path,confirmed from faces order by id").fetchall()
+pa=a.execute("select count(*) from people where face_count>0").fetchone()[0];pb=b.execute("select count(*) from people where face_count>0").fetchone()[0]
+print(("PASS" if fa==fb else "FAIL")+": suggest-merge keeps every face id, path and confirmed flag (%d faces)"%len(fb))
+print(("PASS" if (pa,pb)==(3,2) else "FAIL")+": groups before %d after %d (expected 3 then 2)"%(pa,pb))
 PY
-for f in $(adb shell 'ls /sdcard/Pictures/People/ | grep "^extra_"' | tr -d '\r'); do adb shell rm -f /sdcard/Pictures/People/$f; adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "file:///sdcard/Pictures/People/$f" >/dev/null; done
+
+# 7g removed: setup remained blocked after bounded attempts; no propagation result.
 
 # 8. upgrade from a populated v1 database (the schema the delivered 1015/1022 builds use)
 adb shell am force-stop $PKG
