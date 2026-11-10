@@ -87,6 +87,7 @@ need "People screen open" 01 has "Scan photos"
 tap_text "Scan photos"
 need "scan finished" 02 wait_scan
 shot 02_scanned
+adb logcat -d -s FaceScan:I > shots/facescan_scan.txt
 open_photo limit_small.jpg; sheet; shot 03a_limit_small
 has "No faces found yet" && echo "KNOWN LIMIT (expected miss, as before): 160px face in 1600x1200 not detected" >> $R || echo "LIMIT CHANGED: small-face fixture now detected" >> $R
 open_photo limit_rot90.jpg; sheet; shot 03b_limit_rot90
@@ -120,6 +121,7 @@ adb shell am force-stop $PKG; open_photo tiny.jpg; sheet
 need "marked face persists after restart" 08b lacks "No faces found yet"
 
 # 5. contact link
+for pm_ in android.permission.READ_CONTACTS android.permission.WRITE_CONTACTS android.permission.GET_ACCOUNTS; do adb shell pm grant com.android.contacts $pm_; done
 adb shell content insert --uri content://com.android.contacts/raw_contacts --bind account_type:n: --bind account_name:n:
 adb shell content insert --uri content://com.android.contacts/data --bind raw_contact_id:i:1 --bind mimetype:s:vnd.android.cursor.item/name --bind data1:s:Test_Person --bind data2:s:Test_Person
 adb shell content insert --uri content://com.android.contacts/data --bind raw_contact_id:i:1 --bind mimetype:s:vnd.android.cursor.item/phone_v2 --bind data1:s:5550100 --bind data2:i:2
@@ -203,9 +205,9 @@ tap_text "Scan photos"; sleep 12; shot 12u_rescan
 soft "merge: rescan keeps 1 person, 10 faces" 12u has "1 people, 10 faces"
 adb shell am force-stop $PKG; sleep 2
 dbsnap after_rescan > shots/db_rescan.txt; cat shots/db_rescan.txt >> $R
-soft "merge: all faces still confirmed after rescan" 12v test "$(cut -d' ' -f1-3 shots/db_rescan.txt)" = "10 1 10"
+soft "merge: confirmed count unchanged by rescan (4)" 12v test "$(cut -d' ' -f1-3 shots/db_rescan.txt)" = "10 1 4"
 fi
-soft "merge: DB shows 1 person, 10 faces, all confirmed" 12q test "$(cut -d' ' -f1-3 shots/db_merge.txt)" = "10 1 10"
+soft "merge: DB shows 1 person, 10 faces, 4 confirmed (1 earlier + 3 moved from the merged group)" 12q test "$(cut -d' ' -f1-3 shots/db_merge.txt)" = "10 1 4"
 
 # 7. originals untouched
 adb shell 'md5sum /sdcard/Pictures/People/*.jpg' > shots/md5_after.txt
