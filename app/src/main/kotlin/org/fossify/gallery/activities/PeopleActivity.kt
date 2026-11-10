@@ -55,6 +55,7 @@ class PeopleActivity : SimpleActivity() {
         binding.peoplePlaceholder.setTextColor(getProperTextColor())
         GalleryTabs.bind(this, binding.bottomTabs, binding.peopleHolder, R.id.tab_people, true)
         FaceScanner.listeners.add(listener)
+        FaceScanner.autoStart(this)
         refresh()
     }
 

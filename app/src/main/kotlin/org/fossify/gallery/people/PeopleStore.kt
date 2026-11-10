@@ -153,6 +153,33 @@ class PeopleStore private constructor(context: Context) :
         writableDatabase.update("people", v, "id=?", arrayOf(personId.toString()))
     }
 
+    /** Forget faces and scan records of photos that no longer exist. Never touches the photos themselves. */
+    fun pruneMissing(existing: Set<String>) {
+        val gone = mutableListOf<String>()
+        readableDatabase.rawQuery("SELECT path FROM scanned", null).use {
+            while (it.moveToNext()) { val pth = it.getString(0); if (pth !in existing) gone.add(pth) }
+        }
+        // Safety: with partial photo access the library can look smaller than it is. Never drop
+        // more than a fifth of the records in one go, and only files that are really gone.
+        val reallyGone = gone.filter { !java.io.File(it).exists() }
+        val total = count("SELECT COUNT(*) FROM scanned")
+        if (reallyGone.isEmpty() || reallyGone.size * 5 > total) return
+        val db = writableDatabase
+        val affected = mutableSetOf<Long>()
+        db.beginTransaction()
+        try {
+            for (g in reallyGone) {
+                db.rawQuery("SELECT DISTINCT person_id FROM faces WHERE path=?", arrayOf(g)).use { while (it.moveToNext()) affected.add(it.getLong(0)) }
+                db.delete("faces", "path=?", arrayOf(g))
+                db.delete("scanned", "path=?", arrayOf(g))
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+        for (id in affected) recomputeCentroid(id)
+    }
+
     /** Move all faces of [from] into [into]; centroid becomes the weighted mean. */
     fun mergePeople(from: Long, into: Long) {
         if (from == into) return

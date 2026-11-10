@@ -31,8 +31,18 @@ object FaceScanner {
 
     private fun notifyChanged() = main.post { listeners.forEach { it() } }
 
+    /** True once the user pressed Stop in this app session: no automatic scans after that. */
+    @Volatile var userStopped = false
+        private set
+
     fun stop() {
         stopRequested = true
+        userStopped = true
+    }
+
+    /** Resume incrementally when People opens, but only after a first manual scan and never after Stop. */
+    fun autoStart(context: Context) {
+        if (!running && !userStopped && PeopleStore.get(context).scannedCount() > 0) start(context)
     }
 
     fun start(context: Context) {
@@ -40,6 +50,7 @@ object FaceScanner {
         val app = context.applicationContext
         running = true
         stopRequested = false
+        userStopped = false
         lastError = null
         done = 0
         total = 0
@@ -57,6 +68,7 @@ object FaceScanner {
         try {
             val store = PeopleStore.get(context)
             val pending = mutableListOf<Item>()
+            val allPaths = HashSet<String>()
             val projection = arrayOf(MediaStore.Images.Media._ID, MediaStore.Images.Media.DATA, MediaStore.Images.Media.DATE_MODIFIED)
             context.contentResolver.query(
                 MediaStore.Images.Media.EXTERNAL_CONTENT_URI, projection, null, null,
@@ -64,10 +76,12 @@ object FaceScanner {
             )?.use { c ->
                 while (c.moveToNext()) {
                     val path = c.getString(1) ?: continue
+                    allPaths.add(path)
                     val item = Item(c.getLong(0), path, c.getLong(2))
                     if (!store.isScanned(item.path, item.mtime)) pending.add(item)
                 }
             }
+            if (allPaths.size > 0) store.pruneMissing(allPaths)
             total = pending.size
             notifyChanged()
             if (pending.isEmpty()) return

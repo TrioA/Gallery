@@ -108,6 +108,10 @@ shoot_theme() {
   adb shell input swipe 540 1700 540 600 150; sleep 4; adb exec-out screencap -p > shots/${NAME}_12e_sheet_person.png
   tap_text "Mark a missed face"; sleep 4
   adb shell input tap 540 1000; sleep 8; adb exec-out screencap -p > shots/${NAME}_12f_mark.png
+  adb shell input keyevent KEYCODE_BACK; sleep 3
+  adb shell input swipe 540 1700 540 600 150; sleep 3
+  tap_text "Wrong person"; sleep 2; adb exec-out screencap -p > shots/${NAME}_12g_who_is_this.png
+  tap_text "Person 2"; sleep 3; adb exec-out screencap -p > shots/${NAME}_12h_after_wrong.png
   adb shell am force-stop $PKG; sleep 2
   adb shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n $PKG/org.fossify.gallery.activities.SplashActivity.Green >/dev/null; sleep 6
   tap_text People; sleep 4; adb exec-out screencap -p > shots/${NAME}_13_people_after_restart.png
@@ -122,7 +126,7 @@ shoot_theme() {
   adb shell am force-stop $PKG; sleep 1
   adb shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n $PKG/org.fossify.gallery.activities.SplashActivity.Green >/dev/null; sleep 6
   tap_text People; sleep 3
-  tap_text "Scan photos"; sleep 4; adb exec-out screencap -p > shots/${NAME}_15_scanning.png
+  sleep 3; adb exec-out screencap -p > shots/${NAME}_15_scanning.png
   tap_text "Stop scanning"; sleep 3; adb exec-out screencap -p > shots/${NAME}_16_stopped.png
   adb logcat -d -s FaceScan:I | wc -l > shots/${NAME}_stop_count1.txt; sleep 10
   adb logcat -d -s FaceScan:I | wc -l > shots/${NAME}_stop_count2.txt
