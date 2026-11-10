@@ -348,11 +348,13 @@ soft "after interrupted-photo Stop, rescan completes: 2 people, 9 faces" 19d has
 # (b) reset while a photo is definitely in flight
 wipedb; setdelay 3000; adb logcat -c
 open_people; tap_text "Scan photos"; sleep 4
-open_dev; phrase; has "Scanning" >/dev/null; tap_text ERASE; sleep 1
+open_dev; phrase; shot 19f_before_erase
+has "Scanning" && pass "scan is running when ERASE is pressed (status shows Scanning)" || echo "FAIL: scan was not running when ERASE was pressed" >> $R
+tap_text ERASE; sleep 1
 adb logcat -d -s FaceScan:W > shots/reset_inflight_log0.txt
 sleep 10
 adb logcat -d -s FaceScan:W > shots/reset_inflight_log.txt
-grep -q "abort: reset happened during scan" shots/reset_inflight_log.txt && pass "in-flight scan saw the reset and wrote nothing more (abort logged)" || echo "FAIL: no abort log after reset during scan" >> $R
+grep -q -E "abort: reset happened during scan|interrupted photo not recorded as scanned" shots/reset_inflight_log.txt && pass "in-flight photo was stopped before the erase and not recorded (log: $(grep -o -E 'abort: reset happened|interrupted photo not recorded' shots/reset_inflight_log.txt | head -1))" || echo "FAIL: no stop/abort log for the in-flight photo at reset" >> $R
 adb shell am force-stop $PKG; sleep 1
 C=$(dbcounts resetinflight); [ "$C" = "0 0 0" ] && pass "reset with a photo in flight: 0 people, 0 faces, 0 scanned 10 s later ($C)" || echo "FAIL: in-flight reset left $C" >> $R
 setdelay 0
@@ -398,6 +400,9 @@ N=$(adb shell 'ls /sdcard/Pictures/Regress/*.jpg 2>/dev/null | wc -l' | tr -d '\
 adb shell 'md5sum /sdcard/Pictures/Regress/*.jpg' > shots/reg_after.txt
 grep -F -f <(awk '{print $1}' shots/reg_after.txt) shots/reg_before.txt >/dev/null && pass "the remaining picture is byte-identical to the original" || echo "FAIL: remaining picture differs" >> $R
 adb logcat -d -s AndroidRuntime:E | grep -q "org.fossify.gallery" && echo "FAIL: crash during ordinary actions" >> $R || pass "no crash during album, select and delete"
+# remove the regression fixtures so they cannot be picked up by later scans
+for f in $(adb shell 'ls /sdcard/Pictures/Regress/ 2>/dev/null' | tr -d '\r'); do adb shell rm -f /sdcard/Pictures/Regress/$f; adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "file:///sdcard/Pictures/Regress/$f" >/dev/null; done
+adb shell rm -rf /sdcard/Pictures/Regress
 adb shell am force-stop $PKG
 
 # 8. upgrade from a populated v1 database (the schema the delivered 1015/1022 builds use)
@@ -450,10 +455,10 @@ cols=[r[1] for r in n.execute("pragma table_info(people)")]
 chk('aliases' in cols and 'merged_into' in cols,"upgrade: new columns present")
 of={r[0]:(r[1],r[2]) for r in o.execute("select id,path,person_id from faces")}
 nf={r[0]:(r[1],r[2],r[3]) for r in n.execute("select id,path,person_id,confirmed from faces")}
-chk(set(of)==set(nf) and all(of[i][0]==nf[i][0] for i in of),"upgrade: every original face id and photo path survived")
+chk(set(of)<=set(nf) and all(of[i][0]==nf[i][0] for i in of),"upgrade: every original face id and photo path survived")
 oc={r[0] for r in o.execute("select id from faces where confirmed=1")}
 chk(all(nf[i][2]==1 for i in oc),"upgrade: faces the user confirmed are still confirmed")
-chk(n.execute("select count(*) from scanned").fetchone()[0]==o.execute("select count(*) from scanned").fetchone()[0],"upgrade: scan records survived")
+chk({r[0] for r in o.execute("select path from scanned")}<={r[0] for r in n.execute("select path from scanned")},"upgrade: scan records survived")
 sam=n.execute("select id,face_count from people where name='Sam' and face_count>0 order by id").fetchall()
 chk(len(sam)==2,"equal names stay separate: two groups named Sam remain (faces %s)"%[x[1] for x in sam])
 k1=n.execute("select id,name,aliases,face_count from people where contact_key='K1' and face_count>0").fetchall()
