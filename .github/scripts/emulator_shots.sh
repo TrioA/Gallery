@@ -108,7 +108,7 @@ for n in ET.parse('/tmp/ui.xml').iter('node'):
         m=re.findall(r'\d+',n.get('bounds'));x1,y1,x2,y2=map(int,m);print((x1+x2)//2,(y1+y2)//2);break
 PY
 )
-  if [ -n "$XY" ]; then for k in 1 2 3 4 5 6 7; do adb shell input tap $XY; sleep 0.2; done; sleep 2; adb exec-out screencap -p > shots/${NAME}_11b_dev_reset_dialog.png; tap_text CANCEL; sleep 2; fi
+  if [ -n "$XY" ]; then for k in 1 2 3 4 5 6 7; do adb shell input tap $XY; sleep 0.2; done; sleep 2; adb exec-out screencap -p > shots/${NAME}_11b_dev_reset_dialog.png; tap_raw CANCEL; sleep 2; fi
   tap_text "Person 1"; sleep 5; adb exec-out screencap -p > shots/${NAME}_12_person.png
   tap_text Name; sleep 2; adb exec-out screencap -p > shots/${NAME}_12b_name_dialog.png
   adb shell input text Buzz; sleep 1; adb shell input keyevent KEYCODE_ENTER; sleep 1; adb shell uiautomator dump /sdcard/ui.xml >/dev/null; adb pull /sdcard/ui.xml /tmp/ui.xml >/dev/null; tap_raw OK; sleep 3
