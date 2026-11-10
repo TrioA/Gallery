@@ -405,6 +405,43 @@ for f in $(adb shell 'ls /sdcard/Pictures/Regress/ 2>/dev/null' | tr -d '\r'); d
 adb shell rm -rf /sdcard/Pictures/Regress
 adb shell am force-stop $PKG
 
+# 7g. controlled repro of the wrong-merge report: one deliberately WRONG confirmed correction, then more copies of the same people
+wipedb; open_people; tap_text "Scan photos"; wait_scan
+dbsnap g_clean > /dev/null
+open_photo armstrong_3.jpg; sheet; tap_text "Wrong person"; sleep 2; tap_text "Person 2"; sleep 3; shot 22a_wrong_move
+adb shell am force-stop $PKG; sleep 1
+dbsnap g_contam > /dev/null
+for k in 1 2 3 4 5 6; do for f in armstrong_1 armstrong_2 armstrong_3 armstrong_4 aldrin_1; do
+  adb push faces/$f.jpg /sdcard/Pictures/People/extra_${k}_$f.jpg >/dev/null
+  adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "file:///sdcard/Pictures/People/extra_${k}_$f.jpg" >/dev/null
+done; done
+open_people; tap_text "Scan photos"; wait_scan; shot 22b_after_extras
+adb shell am force-stop $PKG; sleep 1; dbsnap g_after > /dev/null
+python3 - shots/db_g_clean/people.db shots/db_g_contam/people.db shots/db_g_after/people.db >> $R <<'PY'
+import sqlite3,sys,os,struct,math
+def V(b): return struct.unpack('<%df'%(len(b)//4),b)
+def dot(a,b): return sum(x*y for x,y in zip(a,b))
+def lab(p):
+    f=os.path.basename(p); return 'ARM' if 'armstrong' in f else ('ALD' if 'aldrin' in f else 'MULTI')
+for name,db in zip(("clean","after wrong move","after 30 extra copies"),sys.argv[1:4]):
+    c=sqlite3.connect(db); rows=c.execute("select f.path,f.person_id,f.confirmed,p.merged_into from faces f join people p on p.id=f.person_id").fetchall()
+    tab={}
+    for path,pid,cf,mi in rows:
+        k=lab(path)
+        if k=='MULTI': continue
+        tab.setdefault(pid,{'ARM':0,'ALD':0,'conf':0}); tab[pid][k]+=1; tab[pid]['conf']+=cf
+    print("REPRO %s: groups (person id -> Armstrong faces, Aldrin faces, confirmed): %s"%(name,tab))
+c=sqlite3.connect(sys.argv[3]); rows=c.execute("select f.path,f.person_id from faces f").fetchall()
+ex=[(os.path.basename(p),pid) for p,pid in rows if os.path.basename(p).startswith('extra_')]
+mix={}
+for fn,pid in ex: mix.setdefault((pid,'ARM' if 'armstrong' in fn else 'ALD'),0); mix[(pid,'ARM' if 'armstrong' in fn else 'ALD')]+=1
+print("REPRO extras by (person id, true identity): %s"%mix)
+armg={pid for (pid,k) in mix if k=='ARM'}; aldg={pid for (pid,k) in mix if k=='ALD'}
+wrong=sum(n for (pid,k),n in mix.items() if k=='ARM' and pid in aldg and pid not in armg) 
+print("REPRO RESULT: new Armstrong faces: %d total, in the group(s) that also hold Aldrin: %s"%(sum(n for (pid,k),n in mix.items() if k=='ARM'),{pid:n for (pid,k),n in mix.items() if k=='ARM' and pid in aldg}))
+PY
+for f in $(adb shell 'ls /sdcard/Pictures/People/ | grep "^extra_"' | tr -d '\r'); do adb shell rm -f /sdcard/Pictures/People/$f; adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "file:///sdcard/Pictures/People/$f" >/dev/null; done
+
 # 8. upgrade from a populated v1 database (the schema the delivered 1015/1022 builds use)
 adb shell am force-stop $PKG
 adb shell 'rm -f /sdcard/Pictures/People/*.jpg'
