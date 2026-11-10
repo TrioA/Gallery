@@ -155,6 +155,7 @@ jobs:
                   curl -fL --retry 3 -A "$UA" -o faces/aldrin_1.jpg "https://commons.wikimedia.org/wiki/Special:FilePath/Buzz_Aldrin.jpg?width=1200"
                   curl -fL --retry 3 -A "$UA" -o faces/armstrong_3.jpg "https://commons.wikimedia.org/wiki/Special:FilePath/Astronaut_Neil_A._Armstrong_(1964).jpg?width=1200"
                   curl -fL --retry 3 -A "$UA" -o faces/armstrong_4.jpg "https://commons.wikimedia.org/wiki/Special:FilePath/Neil_Armstrong_1958_portrait_cropped.jpg?width=1200"
+                  pip install --quiet pillow
                   python3 - <<'PY'
                   from PIL import Image
                   a=Image.open('faces/armstrong_1.jpg'); a.resize((a.width*2//3,a.height*2//3)).save('faces/armstrong_2.jpg',quality=80)
