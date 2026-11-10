@@ -128,7 +128,15 @@ need "person page open" 09 has "Link contact"
 tap_text "Link contact"; sleep 1; adb logcat -d -s PersonLink:W > shots/personlink_launch.txt; sleep 3; shot 09_picker
 soft "contact picker opened" 09b top_has contacts
 soft "synthetic contact present in picker" 09c has "Test_Person"
-tap_text Test_Person; sleep 4; shot 10_linked; adb logcat -d -s PersonLink:W > shots/personlink.txt
+dump; cp /tmp/ui.xml shots/picker_ui_before.xml; top > shots/top_before_pick.txt
+python3 - >> shots/picker_nodes.txt <<'PY'
+import xml.etree.ElementTree as ET
+for n in ET.parse('/tmp/ui.xml').iter('node'):
+    if n.get('text') or n.get('content-desc'):
+        print(n.get('class'),'|',n.get('text'),'|',n.get('content-desc'),'|',n.get('resource-id'),'|',n.get('clickable'),'|',n.get('bounds'))
+PY
+tap_text Test_Person; sleep 1; shot 10_pick_1s; top > shots/top_after_pick.txt; dump; cp /tmp/ui.xml shots/picker_ui_after.xml
+adb logcat -d | grep -iE "PersonLink|ContactSelection|ActivityTaskManager|ActivityManager" | tail -40 > shots/pick_debug.txt; sleep 3; shot 10_linked; adb logcat -d -s PersonLink:W > shots/personlink.txt
 soft "person page shows linked contact" 10 has "linked to contact Test_Person"
 open_people; adb shell input tap 160 650; sleep 4
 soft "contact link persists after restart" 10b has "linked to contact Test_Person"
@@ -177,13 +185,15 @@ PY
 open_people; adb shell am force-stop $PKG; open_people
 adb shell input swipe 160 650 160 650 900; sleep 2; shot 12m_selected
 soft "merge: selection bar shows after long-press" 12m has "Merge 1 into one"
-adb shell input tap 540 650; sleep 2; shot 12n_two_selected
+tap_text "Person 2"; sleep 2; shot 12n_two_selected
 soft "merge: two groups selected" 12n has "Merge 2 into one"
 tap_text "Merge 2 into one"; sleep 2; shot 12o_confirm
 tap_text Merge; sleep 3; shot 12p_merged
 soft "merge: one person left, all faces kept" 12p has "1 people, 10 faces"
 adb shell am force-stop $PKG; sleep 2
 dbsnap after_merge > shots/db_merge.txt; cat shots/db_merge.txt >> $R
+MERGED=0; [ "$(cut -d' ' -f1-2 shots/db_merge.txt)" = "10 1" ] && MERGED=1
+if [ $MERGED = 0 ]; then echo "SKIPPED: merge did not change the DB (people count is not 1), so integrity checks after merge are not meaningful" >> $R; else
 soft "merge: same face ids, photos and boxes before and after (hash)" 12r test "$(facehash before_revoke)" = "$(facehash after_merge)"
 soft "merge: no face points at an empty or missing group" 12s test "$(orphans after_merge)" = "0"
 open_people; shot 12t_after_restart
@@ -193,6 +203,7 @@ soft "merge: rescan keeps 1 person, 10 faces" 12u has "1 people, 10 faces"
 adb shell am force-stop $PKG; sleep 2
 dbsnap after_rescan > shots/db_rescan.txt; cat shots/db_rescan.txt >> $R
 soft "merge: all faces still confirmed after rescan" 12v test "$(cut -d' ' -f1-3 shots/db_rescan.txt)" = "10 1 10"
+fi
 soft "merge: DB shows 1 person, 10 faces, all confirmed" 12q test "$(cut -d' ' -f1-3 shots/db_merge.txt)" = "10 1 10"
 
 # 7. originals untouched
