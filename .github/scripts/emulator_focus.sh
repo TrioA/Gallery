@@ -452,6 +452,7 @@ NS=$(adb shell 'ls /sdcard/Pictures/Regress/*.jpg 2>/dev/null | wc -l' | tr -d '
 CP=$(adb shell 'ls /sdcard/Pictures/Regress2/*.jpg' | tr -d '\r' | grep -v seed2 | head -1)
 [ -n "$CP" ] && [ "$(adb shell md5sum "$CP" | cut -d' ' -f1)" = "$(adb shell md5sum "$SRC" | cut -d' ' -f1)" ] && pass "copy: copied file is byte-identical" || echo "FAIL: copy: copied file missing or differs" >> $R
 # move: Regress3 (1 file) -> Regress2
+MOVEHASH=$(adb shell md5sum /sdcard/Pictures/Regress3/move3.jpg | awk '{print $1}')
 launch; tap_id tab_albums; sleep 3; scroll_tap Regress3; sleep 3
 XY=$(firstthumb); adb shell input swipe $XY $XY 800 2>/dev/null || adb shell input swipe ${XY% *} ${XY#* } ${XY% *} ${XY#* } 800; sleep 2
 tap_desc "More options"; sleep 2; tap_text "Move to"; sleep 3; shot 24d_move_dialog
@@ -459,6 +460,8 @@ scroll_tap "Regress2"; sleep 2; tap_text OK; sleep 4; shot 24e_after_move
 NM=$(adb shell 'ls /sdcard/Pictures/Regress2/*.jpg 2>/dev/null | wc -l' | tr -d '\r ')
 N3=$(adb shell 'ls /sdcard/Pictures/Regress3/*.jpg 2>/dev/null | wc -l' | tr -d '\r ')
 [ "$NM" = "3" ] && [ "$N3" = "0" ] && pass "move: picture moved to Regress2 (3 there), none left in Regress3" || echo "FAIL: move: Regress2 has $NM (expected 3), Regress3 has $N3 (expected 0)" >> $R
+MHAFTER=$(adb shell md5sum /sdcard/Pictures/Regress2/move3.jpg | awk '{print $1}')
+[ -n "$MOVEHASH" ] && [ "$MOVEHASH" = "$MHAFTER" ] && pass "move: destination bytes match the original before move" || echo "FAIL: move: source/destination hash mismatch or missing file" >> $R
 # recycle bin restore of the two pictures deleted in step 21
 launch; tap_id tab_albums; sleep 3; shot 24f_albums_bin; dump; cp /tmp/ui.xml shots/ui_albums_bin.xml
 if has "Recycle bin"; then tap_text "Recycle bin"; sleep 3; shot 24g_bin; dump; cp /tmp/ui.xml shots/ui_bin.xml
@@ -466,6 +469,14 @@ if has "Recycle bin"; then tap_text "Recycle bin"; sleep 3; shot 24g_bin; dump; 
   tap_desc "More options"; sleep 2; tap_text "Restore selected files"; sleep 4; shot 24i_restored
   NR=$(adb shell 'ls /sdcard/Pictures/Regress/*.jpg 2>/dev/null | wc -l' | tr -d '\r ')
   [ "$NR" = "2" ] && pass "recycle bin: one deleted picture restored to its original folder (Regress has 2)" || echo "FAIL: recycle bin restore: Regress has $NR (expected 2); see ui_bin_selected.xml" >> $R
+  adb shell 'md5sum /sdcard/Pictures/Regress/*.jpg' > shots/reg_restored.txt
+  python3 - shots/reg_before.txt shots/reg_after.txt shots/reg_restored.txt >> $R <<'PY'
+import sys,os
+parse=lambda f:{os.path.basename(p.strip()):h for h,p in (line.split(None,1) for line in open(f))}
+a,b,c=map(parse,sys.argv[1:]);new=set(c)-set(b)
+ok=len(new)==1 and all(n in a and a[n]==c[n] for n in c) and all(c.get(n)==h for n,h in b.items())
+print(("PASS" if ok else "FAIL")+": restore: newly restored original filename and bytes match pre-deletion file; remaining file unchanged")
+PY
 else echo "FAIL: no Recycle Bin tile in Albums after delete (see ui_albums_bin.xml)" >> $R; fi
 for d in Regress2 Regress3; do for f in $(adb shell "ls /sdcard/Pictures/$d/ 2>/dev/null" | tr -d '\r'); do adb shell rm -f /sdcard/Pictures/$d/$f; adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "file:///sdcard/Pictures/$d/$f" >/dev/null; done; adb shell rm -rf /sdcard/Pictures/$d; done
 # remove the regression fixtures so they cannot be picked up by later scans
@@ -514,7 +525,31 @@ adb push shots/h_split.db /data/local/tmp/people.db >/dev/null
 adb shell "run-as $PKG sh -c 'mkdir -p databases; cp /data/local/tmp/people.db databases/people.db; rm -f databases/people.db-wal databases/people.db-shm'"
 open_people_exact; sleep 3; tap_text "Suggest merges"; sleep 3; shot 23b_suggest_split
 has "Merge 2 into one" && echo "PASS: Suggest merges selects the split pair (2 groups) for review" >> $R || echo "FAIL: Suggest merges did not select exactly the split pair" >> $R
-tap_text "Merge 2 into one"; sleep 2; shot 23c_suggest_confirm; tap_text MERGE; sleep 3; shot 23d_suggest_merged
+# One suggested cluster is tentative: untick a group and cancel a merge without changes.
+dump; cp /tmp/ui.xml shots/ui_suggest_pair.xml
+PAIRXY=$(python3 - <<'PY'
+import xml.etree.ElementTree as E,re
+for n in E.parse('/tmp/ui.xml').iter('node'):
+ if (n.get('resource-id') or '').endswith('/person_name') and (n.get('text') or '')=='Person 3':
+  a,b,c,d=map(int,re.findall(r'\d+',n.get('bounds')));print((a+c)//2,(b+d)//2);break
+PY
+)
+if [ -n "$PAIRXY" ]; then
+ adb shell input tap $PAIRXY; sleep 2
+ soft "suggestion review: untick leaves only one selected group" 23untick has "Merge 1 into one"
+ adb shell input tap $PAIRXY; sleep 2
+fi
+tap_text "Merge 2 into one"; sleep 2; shot 23c_suggest_confirm
+tap_text CANCEL; sleep 2
+adb shell am force-stop $PKG; sleep 1; dbsnap h_cancel > /dev/null
+python3 - shots/h_split.db shots/db_h_cancel/people.db >> $R <<'PY'
+import sqlite3,sys
+q="select id,path,person_id,confirmed from faces order by id"
+a=sqlite3.connect(sys.argv[1]);b=sqlite3.connect(sys.argv[2])
+print(("PASS" if a.execute(q).fetchall()==b.execute(q).fetchall() else "FAIL")+": cancelling suggested merge leaves all face assignments unchanged")
+PY
+open_people_exact; tap_text "Suggest merges"; sleep 3
+tap_text "Merge 2 into one"; sleep 2; tap_text MERGE; sleep 3; shot 23d_suggest_merged
 adb shell am force-stop $PKG; sleep 1; dbsnap h_after > /dev/null
 python3 - shots/db_h_base/people.db shots/db_h_after/people.db >> $R <<'PY'
 import sqlite3,sys
