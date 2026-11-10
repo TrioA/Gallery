@@ -68,7 +68,7 @@ PY
 
 shoot_theme() {
   NAME=$1
-  adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1
+  adb shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n $PKG/org.fossify.gallery.activities.SplashActivity.Green
   sleep 10
   adb logcat -d -t 400 > shots/${NAME}_log.txt || true
   adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumed' > shots/${NAME}_top.txt || true
