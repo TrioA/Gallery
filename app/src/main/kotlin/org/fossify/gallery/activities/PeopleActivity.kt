@@ -4,6 +4,7 @@ import android.os.Bundle
 import org.fossify.commons.extensions.getProperTextColor
 import org.fossify.commons.extensions.viewBinding
 import org.fossify.commons.helpers.NavigationIcon
+import org.fossify.gallery.R
 import org.fossify.gallery.databinding.ActivityPeopleBinding
 import org.fossify.gallery.helpers.GalleryTabs
 
@@ -21,6 +22,6 @@ class PeopleActivity : SimpleActivity() {
         super.onResume()
         setupTopAppBar(binding.peopleAppbar, NavigationIcon.None)
         binding.peoplePlaceholder.setTextColor(getProperTextColor())
-        GalleryTabs.bind(this, binding.bottomTabs, binding.peopleHolder, GalleryTabs.PEOPLE, true)
+        GalleryTabs.bind(this, binding.bottomTabs, binding.peopleHolder, R.id.tab_people, true)
     }
 }

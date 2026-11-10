@@ -20,9 +20,6 @@ import org.fossify.gallery.extensions.config
  * Pictures = existing "show all media" mode, Albums = existing folder list.
  */
 object GalleryTabs {
-    const val PICTURES = R.id.tab_pictures
-    const val PEOPLE = R.id.tab_people
-    const val ALBUMS = R.id.tab_albums
 
     fun bind(activity: Activity, nav: BottomNavigationView, content: View, selected: Int, visible: Boolean) {
         if (!visible) {
@@ -58,12 +55,12 @@ object GalleryTabs {
 
     private fun open(activity: Activity, tab: Int) {
         val intent = when (tab) {
-            PICTURES -> {
+            R.id.tab_pictures -> {
                 activity.config.showAll = true
                 Intent(activity, MediaActivity::class.java).putExtra(DIRECTORY, "")
             }
 
-            ALBUMS -> {
+            R.id.tab_albums -> {
                 activity.config.showAll = false
                 Intent(activity, MainActivity::class.java)
             }

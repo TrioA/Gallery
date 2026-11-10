@@ -432,7 +432,7 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
         }
 
         GalleryTabs.bind(
-            this, binding.bottomTabs, binding.mediaHolder, GalleryTabs.PICTURES,
+            this, binding.bottomTabs, binding.mediaHolder, R.id.tab_pictures,
             visible = mShowAll && !mIsGetImageIntent && !mIsGetVideoIntent && !mIsGetAnyIntent
         )
     }

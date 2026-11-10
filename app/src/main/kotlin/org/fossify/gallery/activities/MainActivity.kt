@@ -293,7 +293,7 @@ class MainActivity : SimpleActivity(), DirectoryOperationsListener {
         super.onResume()
         updateMenuColors()
         GalleryTabs.bind(
-            this, binding.bottomTabs, binding.directoriesHolder, GalleryTabs.ALBUMS,
+            this, binding.bottomTabs, binding.directoriesHolder, R.id.tab_albums,
             visible = !mIsThirdPartyIntent
         )
         config.isThirdPartyIntent = false
