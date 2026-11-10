@@ -6,6 +6,16 @@ mkdir -p shots
 R=shots/results.txt; : > $R
 APK=$(ls apk/*debug.apk | head -1)
 PKG=org.fossify.gallery.debug
+python3 - <<'PY' >> $R 2>&1 || { echo "FAIL: fixture validation" >> $R; exit 0; }
+from PIL import Image
+d=lambda f: Image.open(f).size
+a1,a2,a3,a4,al,m,t=[d(f) for f in ['faces/armstrong_1.jpg','faces/armstrong_2.jpg','faces/armstrong_3.jpg','faces/armstrong_4.jpg','faces/aldrin_1.jpg','focus/multi.jpg','focus/tiny.jpg']]
+assert a2[0] < a1[0] and a2[1] < a1[1], ("armstrong_2 must be a real downscale", a1, a2)
+assert len({a1,a3,a4}) == 3 or a1 != a3, ("distinct portraits expected", a1, a3, a4)
+assert m[0] > m[1] and m[0] > a1[0], ("multi must be two portraits side by side", m)
+assert t == (1600, 1200), ("tiny canvas", t)
+print("PASS: fixtures valid", dict(a1=a1,a2=a2,a3=a3,a4=a4,aldrin=al,multi=m,tiny=t))
+PY
 adb install -r "$APK"
 adb shell mkdir -p /sdcard/Pictures/People
 for f in faces/armstrong_1.jpg faces/armstrong_2.jpg faces/armstrong_3.jpg faces/armstrong_4.jpg faces/aldrin_1.jpg focus/multi.jpg focus/tiny.jpg; do
