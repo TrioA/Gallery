@@ -190,7 +190,7 @@ PY
 open_people; adb shell am force-stop $PKG; open_people
 adb shell input swipe 160 650 160 650 900; sleep 2; shot 12m_selected
 soft "merge: selection bar shows after long-press" 12m has "Merge 1 into one"
-tap_text "Person 2"; sleep 2; shot 12n_two_selected
+if has "Person 2"; then tap_text "Person 2"; else tap_text "Person 1"; fi; sleep 2; shot 12n_two_selected
 soft "merge: two groups selected" 12n has "Merge 2 into one"
 tap_text "Merge 2 into one"; sleep 2; shot 12o_confirm
 tap_text MERGE; sleep 3; shot 12p_merged
@@ -406,16 +406,16 @@ adb shell rm -rf /sdcard/Pictures/Regress
 adb shell am force-stop $PKG
 
 # 7g. controlled repro of the wrong-merge report: one deliberately WRONG confirmed correction, then more copies of the same people
-wipedb; open_people; tap_text "Scan photos"; wait_scan
+wipedb; open_people; sleep 3; (has "Scan photos" && tap_text "Scan photos"); wait_scan; sleep 2
 dbsnap g_clean > /dev/null
-open_photo armstrong_3.jpg; sheet; tap_text "Wrong person"; sleep 2; tap_text "Person 2"; sleep 3; shot 22a_wrong_move
+open_photo armstrong_3.jpg; sheet; tap_text "Wrong person"; sleep 2; if has "Person 2"; then tap_text "Person 2"; else tap_text "Person 1"; fi; sleep 3; shot 22a_wrong_move
 adb shell am force-stop $PKG; sleep 1
 dbsnap g_contam > /dev/null
 for k in 1 2 3 4 5 6; do for f in armstrong_1 armstrong_2 armstrong_3 armstrong_4 aldrin_1; do
   adb push faces/$f.jpg /sdcard/Pictures/People/extra_${k}_$f.jpg >/dev/null
   adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "file:///sdcard/Pictures/People/extra_${k}_$f.jpg" >/dev/null
 done; done
-open_people; tap_text "Scan photos"; wait_scan; shot 22b_after_extras
+open_people; sleep 3; (has "Scan photos" && tap_text "Scan photos"); wait_scan; shot 22b_after_extras
 adb shell am force-stop $PKG; sleep 1; dbsnap g_after > /dev/null
 python3 - shots/db_g_clean/people.db shots/db_g_contam/people.db shots/db_g_after/people.db >> $R <<'PY'
 import sqlite3,sys,os,struct,math

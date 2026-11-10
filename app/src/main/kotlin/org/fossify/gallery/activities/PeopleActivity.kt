@@ -50,6 +50,7 @@ class PeopleActivity : SimpleActivity() {
                 updateSelectBar()
             }
         }
+        binding.peopleSuggest.setOnClickListener { suggestMerges() }
         // Hidden developer entry: tap the status line 7 times quickly.
         binding.peopleStatus.setOnClickListener {
             val now = System.currentTimeMillis()
@@ -72,6 +73,8 @@ class PeopleActivity : SimpleActivity() {
             setColor(primary)
         }
         binding.peopleScan.setTextColor(primary.getContrastColor())
+        binding.peopleSuggest.background = GradientDrawable().apply { cornerRadius = 100f; setStroke(3, primary); setColor(0) }
+        binding.peopleSuggest.setTextColor(primary)
         binding.peopleStatus.setTextColor(getProperTextColor())
         binding.peoplePlaceholder.setTextColor(getProperTextColor())
         GalleryTabs.bind(this, binding.bottomTabs, binding.peopleHolder, R.id.tab_people, true)
@@ -83,6 +86,31 @@ class PeopleActivity : SimpleActivity() {
     override fun onPause() {
         super.onPause()
         FaceScanner.listeners.remove(listener)
+    }
+
+    private var suggestions: List<List<Long>> = emptyList()
+    private var suggestIdx = 0
+
+    /** Selects one cluster of likely duplicate groups at a time, for review. Nothing is merged until the user confirms. */
+    private fun suggestMerges() {
+        if (suggestIdx == 0 || suggestIdx >= suggestions.size) {
+            suggestions = PeopleStore.get(this).suggestClusters(SUGGEST_THRESHOLD)
+            suggestIdx = 0
+        }
+        if (suggestions.isEmpty()) {
+            selected.clear()
+            binding.peopleStatus.text = "No likely duplicate groups found. Named and contact-linked groups are never suggested."
+            refresh()
+            return
+        }
+        val cluster = suggestions[suggestIdx]
+        selected.clear()
+        selected.addAll(cluster)
+        suggestIdx = (suggestIdx + 1) % suggestions.size
+        binding.peopleStatus.text = "Suggestion ${if (suggestIdx == 0) suggestions.size else suggestIdx} of ${suggestions.size}: ${cluster.size} groups may be the same person. " +
+            "Untick any that are not, then merge. Tap Suggest merges for the next one."
+        binding.peopleList.adapter?.notifyDataSetChanged()
+        updateSelectBar()
     }
 
     private fun updateSelectBar() {
@@ -119,6 +147,8 @@ class PeopleActivity : SimpleActivity() {
             .setPositiveButton("Merge") { _, _ ->
                 store.mergeMany(selected.toList())
                 selected.clear()
+                suggestions = emptyList()
+                suggestIdx = 0
                 refresh()
             }
             .setNegativeButton(android.R.string.cancel, null)
@@ -248,5 +278,6 @@ class PeopleActivity : SimpleActivity() {
     companion object {
         // Average-face similarity above which "Select similar" suggests a group. Untuned suggestion only.
         private const val SIMILAR_THRESHOLD = 0.30f
+        private const val SUGGEST_THRESHOLD = 0.30f
     }
 }

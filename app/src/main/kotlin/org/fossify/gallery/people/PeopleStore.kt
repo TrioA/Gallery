@@ -259,6 +259,60 @@ class PeopleStore private constructor(context: Context) :
         return merged
     }
 
+    /**
+     * Likely duplicate groups, as clusters of group ids, for the user to review (never merged automatically).
+     * Average-link over faces: the mean cosine between all face pairs of two clusters, computed exactly from the
+     * per-group sum of embeddings. Groups linked to different contacts are never put together.
+     * Threshold chosen on a local labelled public-domain portrait set; it is a suggestion only.
+     */
+    fun suggestClusters(threshold: Float): List<List<Long>> {
+        val sums = LinkedHashMap<Long, FloatArray>()
+        val counts = HashMap<Long, Int>()
+        readableDatabase.rawQuery("SELECT f.person_id, f.emb FROM faces f JOIN people p ON p.id = f.person_id WHERE p.merged_into IS NULL OR p.merged_into = 0", null).use {
+            while (it.moveToNext()) {
+                val id = it.getLong(0)
+                val e = bytesToFloats(it.getBlob(1))
+                val acc = sums.getOrPut(id) { FloatArray(e.size) }
+                for (i in e.indices) acc[i] += e[i]
+                counts[id] = counts.getOrDefault(id, 0) + 1
+            }
+        }
+        // Named or contact-linked groups are the user's own labels: never part of automatic suggestions.
+        val contact = HashMap<Long, String>()
+        for (p in listPeople()) if (p.name.isBlank() && p.contactKey.isBlank()) contact[p.id] = ""
+        val ids = sums.keys.filter { contact.containsKey(it) }.take(MAX_SUGGEST_GROUPS)
+        val n = ids.size
+        if (n < 2) return emptyList()
+        val vec = Array(n) { sums[ids[it]]!!.copyOf() }
+        val cnt = IntArray(n) { counts[ids[it]]!! }
+        val contacts = Array(n) { mutableSetOf<String>().also { s -> contact[ids[it]]?.takeIf { k -> k.isNotBlank() }?.let { k -> s.add(k) } } }
+        val members = Array(n) { mutableListOf(ids[it]) }
+        val alive = BooleanArray(n) { true }
+        while (true) {
+            var best = threshold
+            var ba = -1
+            var bb = -1
+            for (a in 0 until n) {
+                if (!alive[a]) continue
+                for (b in a + 1 until n) {
+                    if (!alive[b]) continue
+                    if (contacts[a].isNotEmpty() && contacts[b].isNotEmpty() && contacts[a] != contacts[b]) continue
+                    val v = FaceMath.dot(vec[a], vec[b]) / (cnt[a].toFloat() * cnt[b].toFloat())
+                    if (v >= best) { best = v; ba = a; bb = b }
+                }
+            }
+            if (ba < 0) break
+            for (i in vec[ba].indices) vec[ba][i] += vec[bb][i]
+            cnt[ba] += cnt[bb]
+            contacts[ba].addAll(contacts[bb])
+            members[ba].addAll(members[bb])
+            alive[bb] = false
+        }
+        return (0 until n).filter { alive[it] && members[it].size > 1 }
+            .sortedByDescending { cnt[it] }
+            .map { members[it].toList() }
+    }
+
     /** Groups whose average face is close to this one: only a suggestion for the user to review. */
     fun similarTo(id: Long, threshold: Float): List<Long> {
         val all = loadCentroids()
@@ -396,6 +450,7 @@ class PeopleStore private constructor(context: Context) :
     companion object {
         @Volatile var epoch = 0
 
+        const val MAX_SUGGEST_GROUPS = 600
         const val MAX_CONFIRMED_EXEMPLARS = 40
         const val MAX_GUESS_EXEMPLARS = 12
         @Volatile

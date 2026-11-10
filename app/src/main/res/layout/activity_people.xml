@@ -36,16 +36,35 @@
             android:paddingEnd="@dimen/activity_margin"
             android:text="@string/people_experimental" />
 
-        <org.fossify.commons.views.MyTextView
-            android:id="@+id/people_scan"
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_margin="@dimen/activity_margin"
-            android:paddingStart="@dimen/big_margin"
-            android:paddingTop="@dimen/medium_margin"
-            android:paddingEnd="@dimen/big_margin"
-            android:paddingBottom="@dimen/medium_margin"
-            android:text="@string/people_scan" />
+            android:orientation="horizontal">
+
+            <org.fossify.commons.views.MyTextView
+                android:id="@+id/people_scan"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_margin="@dimen/activity_margin"
+                android:paddingStart="@dimen/big_margin"
+                android:paddingTop="@dimen/medium_margin"
+                android:paddingEnd="@dimen/big_margin"
+                android:paddingBottom="@dimen/medium_margin"
+                android:text="@string/people_scan" />
+
+
+            <org.fossify.commons.views.MyTextView
+                android:id="@+id/people_suggest"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/activity_margin"
+                android:layout_marginBottom="@dimen/activity_margin"
+                android:paddingStart="@dimen/big_margin"
+                android:paddingTop="@dimen/medium_margin"
+                android:paddingEnd="@dimen/big_margin"
+                android:paddingBottom="@dimen/medium_margin"
+                android:text="Suggest merges" />
+        </LinearLayout>
 
         <LinearLayout
             android:id="@+id/people_select_bar"
