@@ -647,6 +647,20 @@ c=sqlite3.connect(sys.argv[1]);n=c.execute("select count(*) from scanned where p
 print(("PASS" if n==0 else "FAIL")+": Stop during fallback leaves interrupted blank photo unscanned (%d rows)"%n)
 PY
 adb logcat -d -s FaceScan:W > shots/fallback_stop_log.txt
+# Reset after observing fallback start. The UI deliberately stops the scan before it clears the DB.
+setdelay 3000; adb logcat -c
+open_people_exact
+if has "Scan photos"; then tap_text "Scan photos"; fi
+FBRUN=0
+for i in $(seq 1 50); do adb logcat -d -s FaceScan:I | grep -q full_range_fallback_start && { FBRUN=1; break; }; sleep 1; done
+if [ "$FBRUN" = "1" ]; then
+  pass "Reset prerequisite: fallback start observed in log"
+  open_dev; phrase; shot 26b_reset_fallback_dialog
+  tap_text ERASE; sleep 8
+  C1=$(dbcounts fallback_reset); sleep 6; C2=$(dbcounts fallback_reset_later)
+  [ "$C1" = "0 0 0" ] && [ "$C2" = "0 0 0" ] && pass "reset after fallback start stays empty ($C1 then $C2); UI stops before erase" || echo "FAIL: reset after fallback left $C1 then $C2" >> $R
+  shot 26c_reset_fallback_empty
+else echo "FAIL: Reset prerequisite: fallback never started; reset not tested" >> $R; fi
 setdelay 0
 
 echo ALL DONE >> $R
