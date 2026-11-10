@@ -78,6 +78,7 @@ shoot_theme() {
   tap_text People; sleep 4; adb exec-out screencap -p > shots/${NAME}_3_people.png
   tap_text Albums; sleep 4; adb exec-out screencap -p > shots/${NAME}_4_albums.png
   adb logcat -d -b crash > shots/${NAME}_crash.txt || true
+  adb logcat -d -s ActivityTaskManager:I ActivityManager:I AndroidRuntime:E DEBUG:F libc:F > shots/${NAME}_am.txt || true
 }
 
 set_theme darkred FFFFFF 121212 B71C1C
