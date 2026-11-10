@@ -121,7 +121,8 @@ need "marked face persists after restart" 08b lacks "No faces found yet"
 
 # 5. contact link
 adb shell content insert --uri content://com.android.contacts/raw_contacts --bind account_type:n: --bind account_name:n:
-adb shell content insert --uri content://com.android.contacts/data --bind raw_contact_id:i:1 --bind mimetype:s:vnd.android.cursor.item/name --bind data1:s:Test_Person
+adb shell content insert --uri content://com.android.contacts/data --bind raw_contact_id:i:1 --bind mimetype:s:vnd.android.cursor.item/name --bind data1:s:Test_Person --bind data2:s:Test_Person
+adb shell content insert --uri content://com.android.contacts/data --bind raw_contact_id:i:1 --bind mimetype:s:vnd.android.cursor.item/phone_v2 --bind data1:s:5550100 --bind data2:i:2
 adb shell content query --uri content://com.android.contacts/contacts --projection display_name > shots/contacts_list.txt
 open_people; adb shell input tap 160 650; sleep 4
 need "person page open" 09 has "Link contact"
@@ -188,7 +189,7 @@ soft "merge: selection bar shows after long-press" 12m has "Merge 1 into one"
 tap_text "Person 2"; sleep 2; shot 12n_two_selected
 soft "merge: two groups selected" 12n has "Merge 2 into one"
 tap_text "Merge 2 into one"; sleep 2; shot 12o_confirm
-tap_text Merge; sleep 3; shot 12p_merged
+tap_text MERGE; sleep 3; shot 12p_merged
 soft "merge: one person left, all faces kept" 12p has "1 people, 10 faces"
 adb shell am force-stop $PKG; sleep 2
 dbsnap after_merge > shots/db_merge.txt; cat shots/db_merge.txt >> $R
