@@ -364,6 +364,42 @@ adb shell 'md5sum /sdcard/Pictures/People/*.jpg' > shots/md5_e_after.txt
 diff -q shots/md5_e_before.txt shots/md5_e_after.txt >/dev/null && pass "photos byte-identical (md5) before and after the resets" || echo "FAIL: photo hashes changed" >> $R
 diff -q shots/contacts_e_before.txt shots/contacts_e_after.txt >/dev/null && grep -q Test_Person shots/contacts_e_after.txt && pass "phone contact list unchanged by reset (Test_Person still present)" || echo "FAIL: contacts changed" >> $R
 
+# 7f. ordinary gallery regression: albums, multi-select, delete to recycle bin (no People involvement)
+adb shell mkdir -p /sdcard/Pictures/Regress
+for f in faces/armstrong_1.jpg faces/armstrong_2.jpg faces/armstrong_3.jpg; do
+  b=reg_$(basename $f); adb push $f /sdcard/Pictures/Regress/$b >/dev/null
+  adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "file:///sdcard/Pictures/Regress/$b" >/dev/null
+done
+adb shell 'md5sum /sdcard/Pictures/Regress/*.jpg' > shots/reg_before.txt
+launch; tap_text Albums; sleep 3; shot 21a_albums
+tap_text Regress; sleep 3; shot 21b_regress_folder; dump; cp /tmp/ui.xml shots/reg_folder_ui.xml
+python3 - > /tmp/thumbs.txt <<'PY'
+import re,xml.etree.ElementTree as ET
+for n in ET.parse('/tmp/ui.xml').iter('node'):
+    if 'medium_thumbnail' in (n.get('resource-id') or ''):
+        m=re.findall(r'\d+',n.get('bounds'));x1,y1,x2,y2=map(int,m);print((x1+x2)//2,(y1+y2)//2)
+PY
+NT=$(wc -l < /tmp/thumbs.txt); [ "$NT" = "3" ] && pass "Regress album opens and shows its 3 pictures" || echo "FAIL: Regress folder shows $NT thumbnails (expected 3)" >> $R
+T1=$(sed -n 1p /tmp/thumbs.txt); T2=$(sed -n 2p /tmp/thumbs.txt)
+adb shell input swipe $T1 $T1 800 2>/dev/null || adb shell input swipe ${T1% *} ${T1#* } ${T1% *} ${T1#* } 800
+sleep 2; adb shell input tap $T2; sleep 2; shot 21c_two_selected
+dump; cp /tmp/ui.xml shots/reg_selected_ui.xml
+python3 - > /tmp/del.txt <<'PY'
+import re,xml.etree.ElementTree as ET
+for n in ET.parse('/tmp/ui.xml').iter('node'):
+    if (n.get('content-desc') or '')=='Delete' or 'cab_delete' in (n.get('resource-id') or ''):
+        m=re.findall(r'\d+',n.get('bounds'));x1,y1,x2,y2=map(int,m);print((x1+x2)//2,(y1+y2)//2);break
+PY
+[ -s /tmp/del.txt ] && pass "long-press then tap selects 2 pictures and the Delete action appears" || echo "FAIL: no Delete action after selecting (see reg_selected_ui.xml)" >> $R
+adb shell input tap $(cat /tmp/del.txt); sleep 2; shot 21d_delete_confirm
+tap_text YES; sleep 4; tap_text Yes; sleep 3; shot 21e_after_delete
+N=$(adb shell 'ls /sdcard/Pictures/Regress/*.jpg 2>/dev/null | wc -l' | tr -d '\r ')
+[ "$N" = "1" ] && pass "deleted 2 of 3 selected pictures: 1 file left in the album folder" || echo "FAIL: after delete $N files remain in Regress (expected 1)" >> $R
+adb shell 'md5sum /sdcard/Pictures/Regress/*.jpg' > shots/reg_after.txt
+grep -F -f <(awk '{print $1}' shots/reg_after.txt) shots/reg_before.txt >/dev/null && pass "the remaining picture is byte-identical to the original" || echo "FAIL: remaining picture differs" >> $R
+adb logcat -d -s AndroidRuntime:E | grep -q "org.fossify.gallery" && echo "FAIL: crash during ordinary actions" >> $R || pass "no crash during album, select and delete"
+adb shell am force-stop $PKG
+
 # 8. upgrade from a populated v1 database (the schema the delivered 1015/1022 builds use)
 adb shell am force-stop $PKG
 adb shell 'rm -f /sdcard/Pictures/People/*.jpg'
