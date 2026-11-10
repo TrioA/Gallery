@@ -40,7 +40,7 @@ class PeopleActivity : SimpleActivity() {
         binding.peopleList.layoutManager = GridLayoutManager(this, 3)
         binding.peopleList.adapter = Adapter()
         binding.peopleMerge.setOnClickListener { confirmMerge() }
-        binding.peopleCancelSelect.setOnClickListener { selected.clear(); refresh() }
+        binding.peopleCancelSelect.setOnClickListener { selected.clear(); suggestionStatus = null; refresh() }
         binding.peopleSimilar.setOnClickListener {
             if (lastSelected > 0) {
                 val similar = PeopleStore.get(this).similarTo(lastSelected, SIMILAR_THRESHOLD)
@@ -59,6 +59,7 @@ class PeopleActivity : SimpleActivity() {
             if (devTaps >= 7) { devTaps = 0; confirmReset() }
         }
         binding.peopleScan.setOnClickListener {
+            suggestionStatus = null
             if (FaceScanner.running) FaceScanner.stop() else FaceScanner.start(this)
             refresh()
         }
@@ -91,26 +92,52 @@ class PeopleActivity : SimpleActivity() {
     private var suggestions: List<List<Long>> = emptyList()
     private var suggestIdx = 0
 
-    /** Selects one cluster of likely duplicate groups at a time, for review. Nothing is merged until the user confirms. */
+    private var suggestionStatus: String? = null
+    private var computingSuggestions = false
+
+    /** Review-only. Run the all-pairs calculation off the UI thread; never make a merge here. */
     private fun suggestMerges() {
+        if (computingSuggestions) return
         if (suggestIdx == 0 || suggestIdx >= suggestions.size) {
-            suggestions = PeopleStore.get(this).suggestClusters(SUGGEST_THRESHOLD)
-            suggestIdx = 0
-        }
-        if (suggestions.isEmpty()) {
-            selected.clear()
-            binding.peopleStatus.text = "No likely duplicate groups found. Named and contact-linked groups are never suggested."
+            computingSuggestions = true
+            binding.peopleSuggest.isEnabled = false
+            suggestionStatus = "Looking for possible duplicate groups..."
             refresh()
-            return
-        }
-        val cluster = suggestions[suggestIdx]
+            Thread {
+                val store = PeopleStore.get(this)
+                val found = try { store.suggestClusters(SUGGEST_THRESHOLD) } catch (_: Exception) { null }
+                runOnUiThread {
+                    computingSuggestions = false
+                    if (isFinishing || isDestroyed) return@runOnUiThread
+                    binding.peopleSuggest.isEnabled = true
+                    if (found == null) {
+                        suggestionStatus = "Could not check suggestions. No groups were changed."
+                        refresh()
+                    } else {
+                        suggestions = found
+                        suggestIdx = 0
+                        showSuggestion()
+                    }
+                }
+            }.start()
+        } else showSuggestion()
+    }
+
+    private fun showSuggestion() {
+        val store = PeopleStore.get(this)
+        val limited = if (store.suggestionEligibleCount > PeopleStore.MAX_SUGGEST_GROUPS)
+            " Checked the first ${PeopleStore.MAX_SUGGEST_GROUPS} of ${store.suggestionEligibleCount} unnamed groups; the rest were not checked." else ""
         selected.clear()
-        selected.addAll(cluster)
-        suggestIdx = (suggestIdx + 1) % suggestions.size
-        binding.peopleStatus.text = "Suggestion ${if (suggestIdx == 0) suggestions.size else suggestIdx} of ${suggestions.size}: ${cluster.size} groups may be the same person. " +
-            "Untick any that are not, then merge. Tap Suggest merges for the next one."
-        binding.peopleList.adapter?.notifyDataSetChanged()
-        updateSelectBar()
+        if (suggestions.isEmpty()) {
+            suggestionStatus = "No likely duplicate groups found. Named and contact-linked groups are never suggested.$limited"
+        } else {
+            val cluster = suggestions[suggestIdx]
+            selected.addAll(cluster)
+            suggestIdx = (suggestIdx + 1) % suggestions.size
+            suggestionStatus = "Suggestion ${if (suggestIdx == 0) suggestions.size else suggestIdx} of ${suggestions.size}: ${cluster.size} groups may be the same person. " +
+                "Review every selected group and untick any wrong ones before merging. Tap Suggest merges for the next set (up to ${PeopleStore.MAX_REVIEW_GROUPS} groups per set).$limited"
+        }
+        refresh()
     }
 
     private fun updateSelectBar() {
@@ -149,6 +176,7 @@ class PeopleActivity : SimpleActivity() {
                 selected.clear()
                 suggestions = emptyList()
                 suggestIdx = 0
+                suggestionStatus = null
                 refresh()
             }
             .setNegativeButton(android.R.string.cancel, null)
@@ -169,7 +197,7 @@ class PeopleActivity : SimpleActivity() {
             ""
         }
         val err = FaceScanner.lastError?.let { "Scan stopped: $it. " } ?: ""
-        binding.peopleStatus.text = progress + err + "${people.size} people, ${store.faceCount()} faces in ${store.scannedCount()} photos. " +
+        binding.peopleStatus.text = (suggestionStatus?.let { "$it\n" } ?: "") + progress + err + "${people.size} people, ${store.faceCount()} faces in ${store.scannedCount()} photos. " +
             getString(R.string.people_experimental)
         binding.peoplePlaceholder.visibility = View.GONE
     }

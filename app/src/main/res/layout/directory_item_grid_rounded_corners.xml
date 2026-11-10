@@ -86,7 +86,10 @@
         android:layout_toStartOf="@+id/dir_location"
         android:paddingTop="@dimen/medium_margin"
         android:textColor="@android:color/white"
-        android:textSize="@dimen/normal_text_size"
+        android:textSize="15sp"
+        android:fontFamily="sans-serif-medium"
+        android:maxLines="2"
+        android:ellipsize="end"
         tools:text="Camera" />
 
     <TextView
@@ -98,7 +101,8 @@
         android:layout_toStartOf="@+id/dir_location"
         android:paddingTop="@dimen/small_margin"
         android:textColor="@android:color/white"
-        android:textSize="@dimen/normal_text_size"
+        android:textSize="12sp"
+        android:alpha="0.7"
         tools:text="36" />
 
     <ImageView

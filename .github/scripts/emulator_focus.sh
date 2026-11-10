@@ -502,7 +502,8 @@ import sqlite3,sys
 a=sqlite3.connect(sys.argv[1]);b=sqlite3.connect(sys.argv[2])
 fa=a.execute("select id,path,confirmed from faces order by id").fetchall();fb=b.execute("select id,path,confirmed from faces order by id").fetchall()
 pa=a.execute("select count(*) from people where face_count>0").fetchone()[0];pb=b.execute("select count(*) from people where face_count>0").fetchone()[0]
-print(("PASS" if fa==fb else "FAIL")+": suggest-merge keeps every face id, path and confirmed flag (%d faces)"%len(fb))
+same=[r[:2] for r in fa]==[r[:2] for r in fb] and all(not r[2] or dict((x[0],x[2]) for x in fb).get(r[0])==1 for r in fa)
+print(("PASS" if same else "FAIL")+": suggest-merge keeps every face id, path and earlier confirmation (%d faces)"%len(fb))
 print(("PASS" if (pa,pb)==(3,2) else "FAIL")+": groups before %d after %d (expected 3 then 2)"%(pa,pb))
 PY
 

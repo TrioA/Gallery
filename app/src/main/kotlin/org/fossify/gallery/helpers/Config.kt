@@ -580,7 +580,7 @@ class Config(context: Context) : BaseConfig(context) {
         set(thumbnailSpacing) = prefs.edit().putInt(THUMBNAIL_SPACING, thumbnailSpacing).apply()
 
     var fileRoundedCorners: Boolean
-        get() = prefs.getBoolean(FILE_ROUNDED_CORNERS, false)
+        get() = prefs.getBoolean(FILE_ROUNDED_CORNERS, true)
         set(fileRoundedCorners) = prefs.edit().putBoolean(FILE_ROUNDED_CORNERS, fileRoundedCorners).apply()
 
     var customFoldersOrder: String

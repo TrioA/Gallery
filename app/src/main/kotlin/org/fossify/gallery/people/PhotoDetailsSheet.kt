@@ -4,6 +4,7 @@ import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.graphics.BitmapFactory
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
@@ -62,14 +63,24 @@ object PhotoDetailsSheet {
         fun render() {
             root.removeAllViews()
             val file = File(path)
-            root.addView(label(file.name, 17f))
+            // Handle and type hierarchy follow the current theme; the full-screen photo viewer is unchanged.
+            root.addView(View(activity).apply {
+                background = GradientDrawable().apply {
+                    cornerRadius = 100f
+                    setColor((text and 0x00ffffff) or 0x55000000)
+                }
+            }, LinearLayout.LayoutParams((36 * dp).toInt(), (4 * dp).toInt()).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                bottomMargin = (20 * dp).toInt()
+            })
+            root.addView(label(file.name, 19f).apply { typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL) })
             root.addView(label("${file.parent ?: ""}", 12f, 0.6f))
             root.addView(label("${file.length() / 1024} KB", 12f, 0.6f))
             root.addView(button("All properties") { dialog.dismiss(); onAllProperties() }.also {
                 (it.layoutParams as? LinearLayout.LayoutParams)
             }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = (10 * dp).toInt() })
 
-            root.addView(label("People in this photo", 16f), LinearLayout.LayoutParams(-2, -2).apply { topMargin = (22 * dp).toInt() })
+            root.addView(label("People in this photo", 17f).apply { typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL) }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = (22 * dp).toInt() })
             val store = PeopleStore.get(activity)
             val faces = store.facesOfPath(path)
             if (faces.isEmpty()) {
@@ -108,7 +119,7 @@ object PhotoDetailsSheet {
                 root.addView(row)
             }
 
-            root.addView(label("Missed someone?", 14f), LinearLayout.LayoutParams(-2, -2).apply { topMargin = (18 * dp).toInt() })
+            root.addView(label("Missed someone?", 15f).apply { typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL) }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = (18 * dp).toInt() })
             val status = label("", 12f, 0.7f)
             root.addView(button("Look again (more sensitive)") {
                 status.text = "Looking..."

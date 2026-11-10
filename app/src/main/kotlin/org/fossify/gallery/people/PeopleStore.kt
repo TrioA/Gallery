@@ -265,6 +265,9 @@ class PeopleStore private constructor(context: Context) :
      * per-group sum of embeddings. Groups linked to different contacts are never put together.
      * Threshold chosen on a local labelled public-domain portrait set; it is a suggestion only.
      */
+    @Volatile var suggestionEligibleCount = 0
+        private set
+
     fun suggestClusters(threshold: Float): List<List<Long>> {
         val sums = LinkedHashMap<Long, FloatArray>()
         val counts = HashMap<Long, Int>()
@@ -280,7 +283,9 @@ class PeopleStore private constructor(context: Context) :
         // Named or contact-linked groups are the user's own labels: never part of automatic suggestions.
         val contact = HashMap<Long, String>()
         for (p in listPeople()) if (p.name.isBlank() && p.contactKey.isBlank()) contact[p.id] = ""
-        val ids = sums.keys.filter { contact.containsKey(it) }.take(MAX_SUGGEST_GROUPS)
+        val eligible = sums.keys.filter { contact.containsKey(it) }
+        suggestionEligibleCount = eligible.size
+        val ids = eligible.take(MAX_SUGGEST_GROUPS)
         val n = ids.size
         if (n < 2) return emptyList()
         val vec = Array(n) { sums[ids[it]]!!.copyOf() }
@@ -288,6 +293,9 @@ class PeopleStore private constructor(context: Context) :
         val contacts = Array(n) { mutableSetOf<String>().also { s -> contact[ids[it]]?.takeIf { k -> k.isNotBlank() }?.let { k -> s.add(k) } } }
         val members = Array(n) { mutableListOf(ids[it]) }
         val alive = BooleanArray(n) { true }
+        val similarities = Array(n) { a -> FloatArray(n) { b ->
+            FaceMath.dot(vec[a], vec[b]) / (cnt[a].toFloat() * cnt[b].toFloat())
+        } }
         while (true) {
             var best = threshold
             var ba = -1
@@ -295,15 +303,20 @@ class PeopleStore private constructor(context: Context) :
             for (a in 0 until n) {
                 if (!alive[a]) continue
                 for (b in a + 1 until n) {
-                    if (!alive[b]) continue
+                    if (!alive[b] || members[a].size + members[b].size > MAX_REVIEW_GROUPS) continue
                     if (contacts[a].isNotEmpty() && contacts[b].isNotEmpty() && contacts[a] != contacts[b]) continue
-                    val v = FaceMath.dot(vec[a], vec[b]) / (cnt[a].toFloat() * cnt[b].toFloat())
+                    val v = similarities[a][b]
                     if (v >= best) { best = v; ba = a; bb = b }
                 }
             }
             if (ba < 0) break
-            for (i in vec[ba].indices) vec[ba][i] += vec[bb][i]
-            cnt[ba] += cnt[bb]
+            val totalCount = cnt[ba] + cnt[bb]
+            for (k in 0 until n) if (alive[k] && k != ba && k != bb) {
+                val v = (similarities[ba][k] * cnt[ba] + similarities[bb][k] * cnt[bb]) / totalCount
+                similarities[ba][k] = v
+                similarities[k][ba] = v
+            }
+            cnt[ba] = totalCount
             contacts[ba].addAll(contacts[bb])
             members[ba].addAll(members[bb])
             alive[bb] = false
@@ -450,6 +463,7 @@ class PeopleStore private constructor(context: Context) :
     companion object {
         @Volatile var epoch = 0
 
+        const val MAX_REVIEW_GROUPS = 8
         const val MAX_SUGGEST_GROUPS = 600
         const val MAX_CONFIRMED_EXEMPLARS = 40
         const val MAX_GUESS_EXEMPLARS = 12
