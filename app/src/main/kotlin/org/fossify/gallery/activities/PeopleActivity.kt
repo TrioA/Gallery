@@ -76,7 +76,7 @@ class PeopleActivity : SimpleActivity() {
             setColor(primary)
         }
         binding.peopleScan.setTextColor(primary.getContrastColor())
-        binding.peopleSuggest.background = GradientDrawable().apply { cornerRadius = 100f; setStroke(3, primary); setColor(0) }
+        binding.peopleSuggest.background = GradientDrawable().apply { cornerRadius = 100f; setStroke(3, ThemeContrast.textAccent(primary, getProperBackgroundColor(), 3.0)); setColor(0) }
         binding.peopleSuggest.setTextColor(ThemeContrast.textAccent(primary, getProperBackgroundColor()))
         binding.peopleStatus.setTextColor(getProperTextColor())
         binding.peoplePlaceholder.setTextColor(getProperTextColor())
