@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -x
 mkdir -p shots
+# Every screenshot records the foreground activity; a capture taken outside Gallery fails the run at the end.
+snap() { echo "$1 $(adb shell dumpsys activity activities | grep -m1 topResumedActivity | sed 's/.*u0 //')" >> shots/tops.txt; adb exec-out screencap -p > "$1"; }
 APK=$(ls apk/*debug.apk | head -1)
 PKG=org.fossify.gallery.debug
 adb install -r "$APK"
@@ -81,25 +83,25 @@ shoot_theme() {
   adb logcat -d -t 400 > shots/${NAME}_log.txt || true
   adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumed' > shots/${NAME}_top.txt || true
   adb shell run-as $PKG ls -la shared_prefs > shots/${NAME}_prefs.txt 2>&1 || true
-  adb exec-out screencap -p > shots/${NAME}_1_start.png
-  tap_text Pictures; sleep 4; adb exec-out screencap -p > shots/${NAME}_2_pictures.png
-  tap_text People; sleep 4; adb exec-out screencap -p > shots/${NAME}_3_people.png
-  tap_text Albums; sleep 4; adb exec-out screencap -p > shots/${NAME}_4_albums.png
-  tap_text Family; sleep 4; adb exec-out screencap -p > shots/${NAME}_5_folder.png
-  adb shell input tap 180 420; sleep 4; adb exec-out screencap -p > shots/${NAME}_6_viewer.png
-  adb shell input swipe 540 1700 540 600 150; sleep 4; adb exec-out screencap -p > shots/${NAME}_6b_swipe_up.png
+  snap shots/${NAME}_1_start.png
+  tap_text Pictures; sleep 4; snap shots/${NAME}_2_pictures.png
+  tap_text People; sleep 4; snap shots/${NAME}_3_people.png
+  tap_text Albums; sleep 4; snap shots/${NAME}_4_albums.png
+  tap_text Family; sleep 4; snap shots/${NAME}_5_folder.png
+  adb shell input tap 180 420; sleep 4; snap shots/${NAME}_6_viewer.png
+  adb shell input swipe 540 1700 540 600 150; sleep 4; snap shots/${NAME}_6b_swipe_up.png
   adb shell input keyevent KEYCODE_BACK; sleep 2
-  adb exec-out screencap -p > shots/${NAME}_6c_after_sheet_back.png
-  adb shell input keyevent KEYCODE_BACK; sleep 3; adb exec-out screencap -p > shots/${NAME}_7_back_to_folder.png
-  adb shell input keyevent KEYCODE_BACK; sleep 3; adb exec-out screencap -p > shots/${NAME}_8_back_to_albums.png
+  snap shots/${NAME}_6c_after_sheet_back.png
+  adb shell input keyevent KEYCODE_BACK; sleep 3; snap shots/${NAME}_7_back_to_folder.png
+  adb shell input keyevent KEYCODE_BACK; sleep 3; snap shots/${NAME}_8_back_to_albums.png
   tap_text Pictures; sleep 4
-  adb shell input tap 200 700; sleep 8; adb exec-out screencap -p > shots/${NAME}_9_pictures_viewer.png
+  adb shell input tap 200 700; sleep 8; snap shots/${NAME}_9_pictures_viewer.png
   adb shell dumpsys activity activities | grep -E 'topResumedActivity' > shots/${NAME}_top_pv.txt || true
-  adb shell input keyevent KEYCODE_BACK; sleep 3; adb exec-out screencap -p > shots/${NAME}_10_pictures_back.png
+  adb shell input keyevent KEYCODE_BACK; sleep 3; snap shots/${NAME}_10_pictures_back.png
   adb shell dumpsys activity activities | grep -E 'topResumedActivity' > shots/${NAME}_top_end.txt || true
   adb shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n $PKG/org.fossify.gallery.activities.SplashActivity.Green >/dev/null; sleep 6
   tap_text People; sleep 3
-  tap_text "Scan photos"; sleep 45; adb exec-out screencap -p > shots/${NAME}_11_people_scan.png
+  tap_text "Scan photos"; sleep 45; snap shots/${NAME}_11_people_scan.png
   adb shell uiautomator dump /sdcard/ui.xml >/dev/null; adb pull /sdcard/ui.xml /tmp/ui.xml >/dev/null
   XY=$(python3 - <<'PY'
 import re,xml.etree.ElementTree as ET
@@ -108,23 +110,23 @@ for n in ET.parse('/tmp/ui.xml').iter('node'):
         m=re.findall(r'\d+',n.get('bounds'));x1,y1,x2,y2=map(int,m);print((x1+x2)//2,(y1+y2)//2);break
 PY
 )
-  if [ -n "$XY" ]; then for k in 1 2 3 4 5 6 7; do adb shell input tap $XY; sleep 0.2; done; sleep 2; adb exec-out screencap -p > shots/${NAME}_11b_dev_reset_dialog.png; adb shell uiautomator dump /sdcard/ui.xml >/dev/null; adb pull /sdcard/ui.xml /tmp/ui.xml >/dev/null; tap_raw CANCEL; sleep 2; fi
-  tap_text "Person 1"; sleep 5; adb exec-out screencap -p > shots/${NAME}_12_person.png
-  tap_text Name; sleep 2; adb exec-out screencap -p > shots/${NAME}_12b_name_dialog.png
+  if [ -n "$XY" ]; then for k in 1 2 3 4 5 6 7; do adb shell input tap $XY; sleep 0.2; done; sleep 2; snap shots/${NAME}_11b_dev_reset_dialog.png; adb shell uiautomator dump /sdcard/ui.xml >/dev/null; adb pull /sdcard/ui.xml /tmp/ui.xml >/dev/null; tap_raw CANCEL; sleep 2; fi
+  tap_text "Person 1"; sleep 5; snap shots/${NAME}_12_person.png
+  tap_text Name; sleep 2; snap shots/${NAME}_12b_name_dialog.png
   adb shell input text Buzz; sleep 1; adb shell input keyevent KEYCODE_ENTER; sleep 1; adb shell uiautomator dump /sdcard/ui.xml >/dev/null; adb pull /sdcard/ui.xml /tmp/ui.xml >/dev/null; tap_raw OK; sleep 3
-  adb exec-out screencap -p > shots/${NAME}_12c_named.png
-  adb shell input tap 200 600; sleep 6; adb exec-out screencap -p > shots/${NAME}_12d_person_photo.png
-  adb shell input swipe 540 1700 540 600 150; sleep 4; adb exec-out screencap -p > shots/${NAME}_12e_sheet_person.png
+  snap shots/${NAME}_12c_named.png
+  adb shell input tap 200 600; sleep 6; snap shots/${NAME}_12d_person_photo.png
+  adb shell input swipe 540 1700 540 600 150; sleep 4; snap shots/${NAME}_12e_sheet_person.png
   tap_text "Mark a missed face"; sleep 4
-  adb shell input tap 540 1000; sleep 8; adb exec-out screencap -p > shots/${NAME}_12f_mark.png
+  adb shell input tap 540 1000; sleep 8; snap shots/${NAME}_12f_mark.png
   adb shell input keyevent KEYCODE_BACK; sleep 3
   adb shell input swipe 540 1700 540 600 150; sleep 3
-  tap_text "Wrong person"; sleep 2; adb exec-out screencap -p > shots/${NAME}_12g_who_is_this.png
-  tap_text "Person 2"; sleep 3; adb exec-out screencap -p > shots/${NAME}_12h_after_wrong.png
+  tap_text "Wrong person"; sleep 2; snap shots/${NAME}_12g_who_is_this.png
+  tap_text "Person 2"; sleep 3; snap shots/${NAME}_12h_after_wrong.png
   adb shell am force-stop $PKG; sleep 2
   adb shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n $PKG/org.fossify.gallery.activities.SplashActivity.Green >/dev/null; sleep 6
-  tap_text People; sleep 4; adb exec-out screencap -p > shots/${NAME}_13_people_after_restart.png
-  tap_text "Scan photos"; sleep 8; adb exec-out screencap -p > shots/${NAME}_14_rescan_nothing_new.png
+  tap_text People; sleep 4; snap shots/${NAME}_13_people_after_restart.png
+  tap_text "Scan photos"; sleep 8; snap shots/${NAME}_14_rescan_nothing_new.png
   # Stop/resume test: add 24 new copies of face photos, start scan, stop quickly, check it stays stopped, then resume
   for i in $(seq 1 24); do
     src=$(ls faces/*.jpg | sed -n "$(( (i % $(ls faces/*.jpg | wc -l)) + 1 ))p")
@@ -135,32 +137,32 @@ PY
   adb shell am force-stop $PKG; sleep 1
   adb shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n $PKG/org.fossify.gallery.activities.SplashActivity.Green >/dev/null; sleep 6
   tap_text People; sleep 3
-  sleep 3; adb exec-out screencap -p > shots/${NAME}_15_scanning.png
-  tap_text "Stop scanning"; sleep 3; adb exec-out screencap -p > shots/${NAME}_16_stopped.png
+  sleep 3; snap shots/${NAME}_15_scanning.png
+  tap_text "Stop scanning"; sleep 3; snap shots/${NAME}_16_stopped.png
   adb logcat -d -s FaceScan:I | wc -l > shots/${NAME}_stop_count1.txt; sleep 10
   adb logcat -d -s FaceScan:I | wc -l > shots/${NAME}_stop_count2.txt
-  adb exec-out screencap -p > shots/${NAME}_17_still_stopped.png
-  tap_text "Scan photos"; sleep 40; adb exec-out screencap -p > shots/${NAME}_18_resumed_done.png
+  snap shots/${NAME}_17_still_stopped.png
+  tap_text "Scan photos"; sleep 40; snap shots/${NAME}_18_resumed_done.png
   # contact picker check with a synthetic contact in this disposable emulator
   adb shell content insert --uri content://com.android.contacts/raw_contacts --bind account_type:n: --bind account_name:n: >/dev/null 2>&1 || true
   adb shell content insert --uri content://com.android.contacts/data --bind raw_contact_id:i:1 --bind mimetype:s:vnd.android.cursor.item/name --bind data1:s:Test_Person >/dev/null 2>&1 || true
-  adb shell input tap 160 650; sleep 4; adb exec-out screencap -p > shots/${NAME}_18b_buzz_page.png
-  tap_text "Link contact"; sleep 4; adb exec-out screencap -p > shots/${NAME}_19_contact_picker.png
+  adb shell input tap 160 650; sleep 4; snap shots/${NAME}_18b_buzz_page.png
+  tap_text "Link contact"; sleep 4; snap shots/${NAME}_19_contact_picker.png
   adb shell dumpsys activity activities | grep -E 'topResumedActivity' > shots/${NAME}_top_contact.txt || true
-  adb shell input tap 500 360; sleep 4; adb exec-out screencap -p > shots/${NAME}_19b_contact_linked.png
+  adb shell input tap 500 360; sleep 4; snap shots/${NAME}_19b_contact_linked.png
   adb shell input keyevent KEYCODE_HOME; sleep 1; adb shell am force-stop com.android.contacts
   # photo permission revoked then restored: people records must survive untouched
   adb shell am force-stop $PKG
   adb shell pm revoke $PKG android.permission.READ_MEDIA_IMAGES
   adb shell appops set --uid $PKG MANAGE_EXTERNAL_STORAGE deny
   adb shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n $PKG/org.fossify.gallery.activities.SplashActivity.Green >/dev/null; sleep 6
-  adb exec-out screencap -p > shots/${NAME}_20_perm_revoked_start.png
-  tap_text People; sleep 5; adb exec-out screencap -p > shots/${NAME}_21_perm_revoked_people.png
+  snap shots/${NAME}_20_perm_revoked_start.png
+  tap_text People; sleep 5; snap shots/${NAME}_21_perm_revoked_people.png
   adb shell am force-stop $PKG
   adb shell pm grant $PKG android.permission.READ_MEDIA_IMAGES
   adb shell appops set --uid $PKG MANAGE_EXTERNAL_STORAGE allow
   adb shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n $PKG/org.fossify.gallery.activities.SplashActivity.Green >/dev/null; sleep 6
-  tap_text People; sleep 5; adb exec-out screencap -p > shots/${NAME}_22_perm_restored_people.png
+  tap_text People; sleep 5; snap shots/${NAME}_22_perm_restored_people.png
   adb shell 'md5sum /sdcard/Pictures/People/*.jpg /sdcard/Pictures/Family/*.png /sdcard/DCIM/Camera/*.png' > shots/${NAME}_md5_after.txt; grep -v extra_ shots/${NAME}_md5_after.txt | diff - shots/md5_before.txt > shots/${NAME}_md5_diff.txt && echo unchanged >> shots/${NAME}_md5_diff.txt
   adb logcat -d -s FaceScan:I > shots/${NAME}_facescan.txt || true
   adb logcat -d -s AndroidRuntime:E > shots/${NAME}_rt.txt || true
@@ -172,3 +174,7 @@ set_theme darkred FFFFFF 121212 B71C1C
 shoot_theme darkred
 set_theme light 202020 FFFFFF B71C1C
 shoot_theme light
+# guard: screenshots must show Gallery (or the contact picker, which is another app by design)
+BAD=$(grep -v "$PKG" shots/tops.txt | grep -v "_19_contact_picker" || true)
+if [ -n "$BAD" ]; then echo "SMOKE GUARD FAILED: screenshots taken outside Gallery:"; echo "$BAD"; echo "$BAD" > shots/OFFAPP.txt; exit 1; fi
+echo "SMOKE GUARD OK: all $(wc -l < shots/tops.txt) screenshots were taken with Gallery in the foreground"
