@@ -84,7 +84,7 @@ object FaceScanner {
             notifyChanged()
             if (pending.isEmpty()) return
 
-            engine = FaceEngine(context)
+            engine = FaceEngine(context).also { it.shouldStop = { stopRequested } }
             val centroids = store.loadCentroids()
             for (item in pending) {
                 if (stopRequested) break

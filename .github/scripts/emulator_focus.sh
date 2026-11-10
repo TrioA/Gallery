@@ -21,7 +21,7 @@ print("PASS: fixtures valid", dict(mf=mf,a1=a1,a2=a2,a3=a3,a4=a4,aldrin=al,multi
 PY
 adb install -r "$APK"
 adb shell mkdir -p /sdcard/Pictures/People
-for f in faces/armstrong_1.jpg faces/armstrong_2.jpg faces/armstrong_3.jpg faces/armstrong_4.jpg faces/aldrin_1.jpg focus/multi.jpg focus/multi_full.jpg focus/tiny.jpg; do
+for f in faces/armstrong_1.jpg faces/armstrong_2.jpg faces/armstrong_3.jpg faces/armstrong_4.jpg faces/aldrin_1.jpg focus/multi.jpg focus/multi_full.jpg focus/tiny.jpg focus/limit_small.jpg focus/limit_rot90.jpg; do
   adb push $f /sdcard/Pictures/People/ >/dev/null
   adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "file:///sdcard/Pictures/People/$(basename $f)" >/dev/null
 done
@@ -62,6 +62,10 @@ need() { # description, tag, command...
   local d="$1" tag="$2"; shift 2
   if "$@"; then pass "$d"; else fail "$d" "$tag"; fi
 }
+soft() { # like need, but a failure is recorded and later independent checks still run
+  local d="$1" tag="$2"; shift 2
+  if "$@"; then pass "$d"; else echo "FAIL: $d (independent checks continue)" >> $R; shot "fail_$tag"; fi
+}
 launch() { adb shell am force-stop $PKG; adb shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n $PKG/org.fossify.gallery.activities.SplashActivity.Green >/dev/null; sleep 6; }
 open_people() { launch; tap_text People; sleep 3; }
 open_photo() { # file name
@@ -83,6 +87,11 @@ need "People screen open" 01 has "Scan photos"
 tap_text "Scan photos"
 need "scan finished" 02 wait_scan
 shot 02_scanned
+open_photo limit_small.jpg; sheet; shot 03a_limit_small
+has "No faces found yet" && echo "KNOWN LIMIT (expected miss, as before): 160px face in 1600x1200 not detected" >> $R || echo "LIMIT CHANGED: small-face fixture now detected" >> $R
+open_photo limit_rot90.jpg; sheet; shot 03b_limit_rot90
+has "No faces found yet" && echo "KNOWN LIMIT (expected miss, as before): 90-degree rotated face not detected" >> $R || echo "LIMIT CHANGED: rotated fixture now detected" >> $R
+launch; tap_text People; sleep 3
 need "2 people, 9 faces after scan (Armstrong x4 files incl. a real downscale, Aldrin, 2 in multi.jpg head crops, 2 in multi_full.jpg full portraits via tiled detection; tiny.jpg none)" 03 has "2 people, 9 faces"
 
 # 2. multi-person photo
@@ -117,12 +126,12 @@ adb shell content query --uri content://com.android.contacts/contacts --projecti
 open_people; adb shell input tap 160 650; sleep 4
 need "person page open" 09 has "Link contact"
 tap_text "Link contact"; sleep 4; shot 09_picker
-need "contact picker opened" 09b top_has contacts
-need "synthetic contact present in picker" 09c has "Test_Person"
-tap_text Test_Person; sleep 4; shot 10_linked
-need "person page shows linked contact" 10 has "linked to contact Test_Person"
+soft "contact picker opened" 09b top_has contacts
+soft "synthetic contact present in picker" 09c has "Test_Person"
+tap_text Test_Person; sleep 4; shot 10_linked; adb logcat -d -s PersonLink:W > shots/personlink.txt
+soft "person page shows linked contact" 10 has "linked to contact Test_Person"
 open_people; adb shell input tap 160 650; sleep 4
-need "contact link persists after restart" 10b has "linked to contact Test_Person"
+soft "contact link persists after restart" 10b has "linked to contact Test_Person"
 
 # 6. permission revoked then restored: stored people must be untouched (checked in the DB itself)
 dbsnap() { mkdir -p shots/db_$1; for f in people.db people.db-wal people.db-shm; do adb exec-out run-as $PKG cat databases/$f > shots/db_$1/$f 2>/dev/null; done
@@ -148,7 +157,7 @@ adb shell appops set --uid $PKG MANAGE_EXTERNAL_STORAGE allow
 open_people; sleep 5; shot 12_restored_people
 need "restored: People screen shows same people and faces" 12 has "2 people, 9 faces"
 adb shell input tap 160 650; sleep 4
-need "restored: contact link still there" 12b has "linked to contact Test_Person"
+soft "restored: contact link still there" 12b has "linked to contact Test_Person"
 echo "NOTE: scanner behaviour with revoked access is not reachable from the UI (People needs the app open); checked by launch + DB counts only" >> $R
 
 # 7. originals untouched

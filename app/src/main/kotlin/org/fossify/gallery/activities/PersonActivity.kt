@@ -95,17 +95,20 @@ class PersonActivity : SimpleActivity() {
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        android.util.Log.w("PersonLink", "result req=$requestCode code=$resultCode personId=$personId")
         if (requestCode == REQ_CONTACT && resultCode == RESULT_OK) {
             val uri = data?.data ?: return
             try {
                 contentResolver.query(
                     uri, arrayOf(ContactsContract.Contacts.LOOKUP_KEY, ContactsContract.Contacts.DISPLAY_NAME), null, null, null
                 )?.use {
+                    android.util.Log.w("PersonLink", "rows=${it.count}")
                     if (it.moveToFirst()) {
                         PeopleStore.get(this).setContact(personId, it.getString(0) ?: "", it.getString(1) ?: "")
                     }
                 }
             } catch (e: Exception) {
+                android.util.Log.w("PersonLink", "query failed", e)
                 binding.personInfo.text = "Could not read that contact."
             }
             load()

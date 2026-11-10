@@ -23,6 +23,9 @@ import java.nio.ByteOrder
  * The embedder is isolated here so a different model can be swapped in.
  */
 class FaceEngine(context: Context, private val minConfidence: Float = 0.6f) : Closeable {
+    /** Checked between tiles so Stop is honoured mid-photo. */
+    @Volatile var shouldStop: () -> Boolean = { false }
+
 
     class Found(
         val left: Float, val top: Float, val right: Float, val bottom: Float,
@@ -58,6 +61,18 @@ class FaceEngine(context: Context, private val minConfidence: Float = 0.6f) : Cl
         fun cx() = (left + right) / 2
         fun cy() = (top + bottom) / 2
         fun contains(x: Float, y: Float) = x in left..right && y in top..bottom
+        private fun area() = maxOf(0f, right - left) * maxOf(0f, bottom - top)
+        /** Same face seen twice: high overlap, or the smaller box mostly inside a box of similar size. Different-size nested boxes stay distinct. */
+        fun duplicateOf(o: Cand): Boolean {
+            val iw = minOf(right, o.right) - maxOf(left, o.left)
+            val ih = minOf(bottom, o.bottom) - maxOf(top, o.top)
+            if (iw <= 0 || ih <= 0) return false
+            val inter = iw * ih
+            val a = area(); val b = o.area()
+            val small = minOf(a, b); val big = maxOf(a, b)
+            val iou = inter / (a + b - inter)
+            return iou >= 0.4f || (inter / small >= 0.7f && small / big >= 0.5f)
+        }
     }
 
     private fun detectIn(src: Bitmap, ox: Int, oy: Int, minScore: Float, out: MutableList<Cand>) {
@@ -88,28 +103,44 @@ class FaceEngine(context: Context, private val minConfidence: Float = 0.6f) : Cl
         val all = mutableListOf<Cand>()
         detectIn(bitmap, 0, 0, 0f, all)
         val m = minOf(bitmap.width, bitmap.height)
+        var tiles = 0
+        val t0 = SystemClock.elapsedRealtime()
         if (m >= TILE_MIN_SIDE) {
-            val s = (m * TILE_FRACTION).toInt()
-            val step = maxOf(1, s / 2)
-            val xs = tileStarts(bitmap.width, s, step)
-            val ys = tileStarts(bitmap.height, s, step)
+            val intensive = minConfidence < 0.6f
+            val s = (m * (if (intensive) TILE_FRACTION else BUDGET_TILE_FRACTION)).toInt()
+            // Automatic scans use a fixed budget of 6 tiles (3 along the long side, 2 along the short side);
+            // "Look again" and manual mark use the full overlapping grid.
+            val pts = mutableListOf<Pair<Int, Int>>()
+            if (intensive) {
+                val xs = tileStarts(bitmap.width, s, maxOf(1, s / 2)); val ys = tileStarts(bitmap.height, s, maxOf(1, s / 2))
+                if (xs.size * ys.size <= MAX_TILES) for (y in ys) for (x in xs) pts.add(x to y)
+            } else {
+                val landscape = bitmap.width >= bitmap.height
+                val xs = spread(bitmap.width, s, if (landscape) 3 else 2)
+                val ys = spread(bitmap.height, s, if (landscape) 2 else 3)
+                for (y in ys) for (x in xs) pts.add(x to y)
+            }
             // Tile-only detections must be confident: weak ones on tiles are mostly face-like patches.
-            val tileMinScore = if (minConfidence < 0.6f) minConfidence else TILE_MIN_SCORE
-            if (xs.size * ys.size <= MAX_TILES) {
-                for (y in ys) for (x in xs) {
-                    val tile = Bitmap.createBitmap(bitmap, x, y, s, s)
-                    detectIn(tile, x, y, tileMinScore, all)
-                    tile.recycle()
-                }
+            val tileMinScore = if (intensive) minConfidence else TILE_MIN_SCORE
+            for ((x, y) in pts.distinct()) {
+                if (shouldStop()) break
+                val tile = Bitmap.createBitmap(bitmap, x, y, s, s)
+                detectIn(tile, x, y, tileMinScore, all)
+                tile.recycle()
+                tiles++
             }
         }
         val keep = mutableListOf<Cand>()
         for (c in all.sortedByDescending { it.score }) {
-            if (keep.any { it.contains(c.cx(), c.cy()) || c.contains(it.cx(), it.cy()) }) continue
+            if (keep.any { it.duplicateOf(c) }) continue
             keep.add(c)
         }
+        Log.i("FaceScan", "tiles=$tiles tile_ms=${SystemClock.elapsedRealtime() - t0} raw=${all.size} kept=${keep.size}")
         return keep
     }
+
+    private fun spread(total: Int, size: Int, n: Int): List<Int> =
+        if (total <= size) listOf(0) else (0 until n).map { it * (total - size) / (n - 1) }.distinct()
 
     private fun tileStarts(total: Int, size: Int, step: Int): List<Int> {
         val out = mutableListOf<Int>()
@@ -173,6 +204,7 @@ class FaceEngine(context: Context, private val minConfidence: Float = 0.6f) : Cl
         private const val INPUT = 112
         private const val MIN_FACE_PX = 48f
         private const val TILE_FRACTION = 0.5f
+        private const val BUDGET_TILE_FRACTION = 0.6f
         private const val TILE_MIN_SIDE = 400
         private const val MAX_TILES = 24
         private const val TILE_MIN_SCORE = 0.85f

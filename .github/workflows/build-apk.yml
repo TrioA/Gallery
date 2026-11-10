@@ -169,6 +169,9 @@ jobs:
                   from PIL import ImageEnhance
                   T=Image.open('faces/armstrong_3.jpg').convert('RGB'); T=T.resize((360,int(360*T.height/T.width))); T=ImageEnhance.Brightness(T).enhance(0.15)
                   c=Image.new('RGB',(1600,1200),(70,70,70)); c.paste(T,(800-T.width//2,600-T.height//2)); c.save('focus/tiny.jpg',quality=90)
+                  T0=Image.open('faces/armstrong_3.jpg').convert('RGB')
+                  T=T0.resize((160,int(160*T0.height/T0.width))); c=Image.new('RGB',(1600,1200),(70,70,70)); c.paste(T,(800-T.width//2,600-T.height//2)); c.save('focus/limit_small.jpg',quality=90)
+                  T=T0.resize((360,int(360*T0.height/T0.width))).rotate(90,expand=True,fillcolor=(70,70,70)); c=Image.new('RGB',(1600,1200),(70,70,70)); c.paste(T,(800-T.width//2,600-T.height//2)); c.save('focus/limit_rot90.jpg',quality=90)
                   PY
                   ls -l faces focus
             - name: Focused emulator checks
