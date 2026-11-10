@@ -20,22 +20,50 @@
 
     </org.fossify.commons.views.MyAppBarLayout>
 
-    <RelativeLayout
+    <LinearLayout
         android:id="@+id/people_holder"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:orientation="vertical"
         app:layout_behavior="@string/appbar_scrolling_view_behavior">
+
+        <org.fossify.commons.views.MyTextView
+            android:id="@+id/people_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingStart="@dimen/activity_margin"
+            android:paddingTop="@dimen/medium_margin"
+            android:paddingEnd="@dimen/activity_margin"
+            android:text="@string/people_experimental" />
+
+        <org.fossify.commons.views.MyTextView
+            android:id="@+id/people_scan"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_margin="@dimen/activity_margin"
+            android:paddingStart="@dimen/big_margin"
+            android:paddingTop="@dimen/medium_margin"
+            android:paddingEnd="@dimen/big_margin"
+            android:paddingBottom="@dimen/medium_margin"
+            android:text="@string/people_scan" />
 
         <org.fossify.commons.views.MyTextView
             android:id="@+id/people_placeholder"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_centerInParent="true"
             android:gravity="center_horizontal"
             android:padding="@dimen/big_margin"
-            android:text="@string/people_coming_soon" />
+            android:text="@string/people_coming_soon"
+            android:visibility="gone" />
 
-    </RelativeLayout>
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/people_list"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:clipToPadding="false" />
+
+    </LinearLayout>
 
     <com.google.android.material.bottomnavigation.BottomNavigationView
         android:id="@+id/bottom_tabs"

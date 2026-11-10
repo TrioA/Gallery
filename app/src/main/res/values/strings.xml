@@ -308,4 +308,9 @@
     <string name="tab_people">People</string>
     <string name="tab_albums">Albums</string>
     <string name="people_coming_soon">People will appear here once face recognition is added.</string>
+    <string name="people_experimental">Experimental: faces are found and grouped on this phone only. Nothing is uploaded. Accuracy is not verified yet.</string>
+    <string name="people_scan">Scan photos</string>
+    <string name="people_scanning">Stop scanning</string>
+    <string name="person_rename">Name</string>
+    <string name="person_link_contact">Link contact</string>
 </resources>

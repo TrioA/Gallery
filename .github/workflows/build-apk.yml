@@ -33,6 +33,16 @@ jobs:
                   echo "SIGNING_STORE_FILE=$RUNNER_TEMP/gallery.jks" >> "$GITHUB_ENV"
                   echo "SIGNING_KEY_ALIAS=${{ secrets.SIGNING_KEY_ALIAS }}" >> "$GITHUB_ENV"
 
+            - name: Fetch face models
+              run: |
+                  mkdir -p app/src/main/assets
+                  curl -fL --retry 3 -o app/src/main/assets/blaze_face_short_range.tflite \
+                    https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite
+                  curl -fL --retry 3 -o app/src/main/assets/auraface_glintr100.tflite \
+                    https://huggingface.co/eungsang/auraface-v1-tflite/resolve/ac623dbbf0d4e883203f76a30c365bcc967fed3a/auraface_v1_glintr100_wi8.tflite
+                  sha256sum app/src/main/assets/*.tflite
+                  ls -l app/src/main/assets
+
             - name: Build foss debug APK
               env:
                   SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}

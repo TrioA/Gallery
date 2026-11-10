@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/person_coordinator"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <org.fossify.commons.views.MyAppBarLayout
+        android:id="@+id/person_appbar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/person_toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="?attr/actionBarSize"
+            android:background="@color/color_primary"
+            app:titleTextAppearance="@style/AppTheme.ActionBar.TitleTextStyle" />
+
+    </org.fossify.commons.views.MyAppBarLayout>
+
+    <LinearLayout
+        android:id="@+id/person_holder"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:padding="@dimen/activity_margin">
+
+            <org.fossify.commons.views.MyTextView
+                android:id="@+id/person_rename"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingStart="@dimen/big_margin"
+                android:paddingTop="@dimen/medium_margin"
+                android:paddingEnd="@dimen/big_margin"
+                android:paddingBottom="@dimen/medium_margin"
+                android:text="@string/person_rename" />
+
+            <org.fossify.commons.views.MyTextView
+                android:id="@+id/person_contact"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/medium_margin"
+                android:paddingStart="@dimen/big_margin"
+                android:paddingTop="@dimen/medium_margin"
+                android:paddingEnd="@dimen/big_margin"
+                android:paddingBottom="@dimen/medium_margin"
+                android:text="@string/person_link_contact" />
+        </LinearLayout>
+
+        <org.fossify.commons.views.MyTextView
+            android:id="@+id/person_info"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingStart="@dimen/activity_margin"
+            android:paddingEnd="@dimen/activity_margin"
+            android:paddingBottom="@dimen/medium_margin" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/person_grid"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+    </LinearLayout>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

@@ -13,3 +13,4 @@ keystore.properties
 fastlane/fastlane.json
 fastlane/report.xml
 .kotlin/
+app/src/main/assets/*.tflite

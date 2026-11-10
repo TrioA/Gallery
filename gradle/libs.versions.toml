@@ -43,6 +43,8 @@ app-build-minimumSDK = "26"
 app-build-javaVersion = "VERSION_17"
 app-build-kotlinJVMTarget = "17"
 [libraries]
+mediapipe-tasks-vision = { module = "com.google.mediapipe:tasks-vision", version = "1.2.2" }
+tensorflow-lite = { module = "org.tensorflow:tensorflow-lite", version = "2.17.0" }
 #AndroidX
 androidx-lifecycle-runtime = { module = "androidx.lifecycle:lifecycle-runtime", version.ref = "androidx-lifecycle" }
 androidx-media3-exoplayer = { module = "androidx.media3:media3-exoplayer", version.ref = "media3Exoplayer" }

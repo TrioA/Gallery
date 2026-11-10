@@ -87,9 +87,13 @@ shoot_theme() {
   adb shell input keyevent KEYCODE_BACK; sleep 3; adb exec-out screencap -p > shots/${NAME}_7_back_to_folder.png
   adb shell input keyevent KEYCODE_BACK; sleep 3; adb exec-out screencap -p > shots/${NAME}_8_back_to_albums.png
   tap_text Pictures; sleep 4
-  adb shell input tap 180 420; sleep 4; adb exec-out screencap -p > shots/${NAME}_9_pictures_viewer.png
+  adb shell input tap 180 420; sleep 8; adb exec-out screencap -p > shots/${NAME}_9_pictures_viewer.png
   adb shell input keyevent KEYCODE_BACK; sleep 3; adb exec-out screencap -p > shots/${NAME}_10_pictures_back.png
   adb shell dumpsys activity activities | grep -E 'topResumedActivity' > shots/${NAME}_top_end.txt || true
+  adb shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n $PKG/org.fossify.gallery.activities.SplashActivity.Green >/dev/null; sleep 6
+  tap_text People; sleep 3
+  tap_text "Scan photos"; sleep 20; adb exec-out screencap -p > shots/${NAME}_11_people_scan.png
+  adb logcat -d -s AndroidRuntime:E > shots/${NAME}_rt.txt || true
   adb logcat -d -b crash > shots/${NAME}_crash.txt || true
   adb logcat -d -s ActivityTaskManager:I ActivityManager:I AndroidRuntime:E DEBUG:F libc:F > shots/${NAME}_am.txt || true
 }

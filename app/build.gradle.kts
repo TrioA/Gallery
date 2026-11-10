@@ -179,6 +179,8 @@ detekt {
 
 dependencies {
     implementation(libs.fossify.commons)
+    implementation(libs.mediapipe.tasks.vision)
+    implementation(libs.tensorflow.lite)
     implementation(libs.androidx.print)
     implementation(libs.android.image.cropper)
     implementation(libs.exif)
