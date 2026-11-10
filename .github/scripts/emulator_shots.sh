@@ -135,10 +135,10 @@ shoot_theme() {
   # contact picker check with a synthetic contact in this disposable emulator
   adb shell content insert --uri content://com.android.contacts/raw_contacts --bind account_type:n: --bind account_name:n: >/dev/null 2>&1 || true
   adb shell content insert --uri content://com.android.contacts/data --bind raw_contact_id:i:1 --bind mimetype:s:vnd.android.cursor.item/name --bind data1:s:Test_Person >/dev/null 2>&1 || true
-  tap_text "Buzz"; sleep 4; adb exec-out screencap -p > shots/${NAME}_18b_buzz_page.png
+  adb shell input tap 160 650; sleep 4; adb exec-out screencap -p > shots/${NAME}_18b_buzz_page.png
   tap_text "Link contact"; sleep 4; adb exec-out screencap -p > shots/${NAME}_19_contact_picker.png
   adb shell dumpsys activity activities | grep -E 'topResumedActivity' > shots/${NAME}_top_contact.txt || true
-  tap_text Test_Person; sleep 4; adb exec-out screencap -p > shots/${NAME}_19b_contact_linked.png
+  adb shell input tap 500 360; sleep 4; adb exec-out screencap -p > shots/${NAME}_19b_contact_linked.png
   adb shell input keyevent KEYCODE_HOME; sleep 1; adb shell am force-stop com.android.contacts
   # photo permission revoked then restored: people records must survive untouched
   adb shell am force-stop $PKG
@@ -146,7 +146,7 @@ shoot_theme() {
   adb shell appops set --uid $PKG MANAGE_EXTERNAL_STORAGE deny
   adb shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n $PKG/org.fossify.gallery.activities.SplashActivity.Green >/dev/null; sleep 6
   adb exec-out screencap -p > shots/${NAME}_20_perm_revoked_start.png
-  adb shell am start -n $PKG/org.fossify.gallery.activities.PeopleActivity >/dev/null 2>&1; sleep 5; adb exec-out screencap -p > shots/${NAME}_21_perm_revoked_people.png
+  tap_text People; sleep 5; adb exec-out screencap -p > shots/${NAME}_21_perm_revoked_people.png
   adb shell am force-stop $PKG
   adb shell pm grant $PKG android.permission.READ_MEDIA_IMAGES
   adb shell appops set --uid $PKG MANAGE_EXTERNAL_STORAGE allow
