@@ -121,7 +121,15 @@ class PersonActivity : SimpleActivity() {
 
     private inner class Adapter : RecyclerView.Adapter<Holder>() {
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
-            Holder(LayoutInflater.from(parent.context).inflate(R.layout.item_person_photo, parent, false))
+            Holder(LayoutInflater.from(parent.context).inflate(R.layout.item_person_photo, parent, false).also {
+                // Rounded photo tiles, like the Albums tab.
+                it.outlineProvider = object : android.view.ViewOutlineProvider() {
+                    override fun getOutline(view: android.view.View, outline: android.graphics.Outline) {
+                        outline.setRoundRect(0, 0, view.width, view.height, 28f)
+                    }
+                }
+                it.clipToOutline = true
+            })
 
         override fun getItemCount() = paths.size
 
