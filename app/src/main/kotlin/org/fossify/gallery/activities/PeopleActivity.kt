@@ -50,6 +50,13 @@ class PeopleActivity : SimpleActivity() {
                 updateSelectBar()
             }
         }
+        // Hidden developer entry: tap the status line 7 times quickly.
+        binding.peopleStatus.setOnClickListener {
+            val now = System.currentTimeMillis()
+            devTaps = if (now - lastDevTap > 1500) 1 else devTaps + 1
+            lastDevTap = now
+            if (devTaps >= 7) { devTaps = 0; confirmReset() }
+        }
         binding.peopleScan.setOnClickListener {
             if (FaceScanner.running) FaceScanner.stop() else FaceScanner.start(this)
             refresh()
@@ -137,6 +144,44 @@ class PeopleActivity : SimpleActivity() {
         binding.peoplePlaceholder.visibility = View.GONE
     }
 
+    private var devTaps = 0
+    private var lastDevTap = 0L
+
+    private fun confirmReset() {
+        val input = android.widget.EditText(this).apply { hint = "DELETE ALL PEOPLE DATA"; setSingleLine() }
+        val dlg = androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Developer: erase ALL People data?")
+            .setMessage(
+                "This permanently erases every People group, name, alias, contact link, face, correction and scan record, " +
+                    "and cannot be undone. Your photos and phone contacts are NOT touched.\n\n" +
+                    "Type DELETE ALL PEOPLE DATA to confirm."
+            )
+            .setView(input)
+            .setPositiveButton("ERASE", null)
+            .setNegativeButton("CANCEL", null)
+            .create()
+        dlg.setOnShowListener {
+            dlg.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                if (input.text.toString().trim() != "DELETE ALL PEOPLE DATA") {
+                    input.error = "Type the exact phrase"
+                    return@setOnClickListener
+                }
+                dlg.dismiss()
+                selected.clear()
+                binding.peopleStatus.text = "Stopping scan and erasing People data..."
+                Thread {
+                    val stopped = FaceScanner.stopAndWait(20000)
+                    if (stopped) PeopleStore.get(this).resetAll()
+                    runOnUiThread {
+                        refresh()
+                        binding.peopleStatus.text = if (stopped) "People data erased. Press Scan photos for a fresh scan." else "Could not stop the scan in time. Nothing was erased."
+                    }
+                }.start()
+            }
+        }
+        dlg.show()
+    }
+
     private inner class Adapter : RecyclerView.Adapter<Holder>() {
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
             val v = LayoutInflater.from(parent.context).inflate(R.layout.item_person, parent, false)
@@ -146,9 +191,12 @@ class PeopleActivity : SimpleActivity() {
             face.background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
                 setColor(0x22888888)
-                setStroke(5, getProperPrimaryColor())
             }
-            face.setPadding(9, 9, 9, 9)
+            face.foreground = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(0)
+                setStroke(6, getProperPrimaryColor())
+            }
             face.clipToOutline = true
             return Holder(v)
         }

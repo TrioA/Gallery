@@ -36,6 +36,14 @@ object FaceScanner {
     @Volatile var userStopped = false
         private set
 
+    /** Stop and wait for the scan thread to finish. Returns false if it is still running after the timeout. */
+    fun stopAndWait(timeoutMs: Long): Boolean {
+        stop()
+        val end = System.currentTimeMillis() + timeoutMs
+        while (running && System.currentTimeMillis() < end) Thread.sleep(50)
+        return !running
+    }
+
     fun stop() {
         stopRequested = true
         userStopped = true
@@ -84,10 +92,11 @@ object FaceScanner {
             notifyChanged()
             if (pending.isEmpty()) return
 
-            engine = FaceEngine(context).also { it.shouldStop = { stopRequested } }
+            val epoch = PeopleStore.epoch
+            engine = FaceEngine(context).also { it.shouldStop = { stopRequested || PeopleStore.epoch != epoch } }
             val centroids = store.loadCentroids()
             for (item in pending) {
-                if (stopRequested) break
+                if (stopRequested || PeopleStore.epoch != epoch) break
                 var found = 0
                 try {
                     val bmp = decode(context, item.id)
@@ -99,6 +108,7 @@ object FaceScanner {
                             centroids.addAll(store.loadCentroids())
                         }
                         for (f in engine.process(bmp)) {
+                            if (PeopleStore.epoch != epoch) break
                             if (keep.any { FaceMath.dot(it, f.embedding) >= 0.6f }) { found++; continue }
                             assign(store, centroids, item.path, f)
                             found++
@@ -108,6 +118,7 @@ object FaceScanner {
                 } catch (e: Exception) {
                     // unreadable photo: remember it so we do not retry on every scan
                 }
+                if (PeopleStore.epoch != epoch || engine.interrupted) break
                 store.markScanned(item.path, item.mtime, found)
                 done++
                 if (done % 3 == 0) notifyChanged()

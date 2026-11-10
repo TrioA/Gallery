@@ -50,6 +50,26 @@ class PeopleStore private constructor(context: Context) :
         }
     }
 
+    /**
+     * Developer reset: clears ONLY the People recognition data (groups, names, aliases, contact links,
+     * faces, corrections, embeddings, scan memory). Never touches photos or phone contacts.
+     * The epoch is bumped first so any in-flight scan work sees it and writes nothing more.
+     */
+    fun resetAll() {
+        epoch++
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.execSQL("DELETE FROM faces")
+            db.execSQL("DELETE FROM people")
+            db.execSQL("DELETE FROM scanned")
+            db.execSQL("DELETE FROM sqlite_sequence WHERE name IN ('people','faces')")
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
     // ---- scanning state ----
     fun isScanned(path: String, mtime: Long): Boolean {
         readableDatabase.rawQuery("SELECT mtime FROM scanned WHERE path=?", arrayOf(path)).use {
@@ -374,6 +394,8 @@ class PeopleStore private constructor(context: Context) :
     }
 
     companion object {
+        @Volatile var epoch = 0
+
         const val MAX_CONFIRMED_EXEMPLARS = 40
         const val MAX_GUESS_EXEMPLARS = 12
         @Volatile

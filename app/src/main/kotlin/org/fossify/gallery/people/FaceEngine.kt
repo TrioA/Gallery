@@ -25,6 +25,8 @@ import java.nio.ByteOrder
 class FaceEngine(context: Context, private val minConfidence: Float = 0.6f) : Closeable {
     /** Checked between tiles so Stop is honoured mid-photo. */
     @Volatile var shouldStop: () -> Boolean = { false }
+    /** True if the last photo was cut short by Stop, so the scanner must not record it as fully scanned. */
+    @Volatile var interrupted = false
 
 
     class Found(
@@ -101,6 +103,7 @@ class FaceEngine(context: Context, private val minConfidence: Float = 0.6f) : Cl
      */
     private fun detectAll(bitmap: Bitmap): List<Cand> {
         val all = mutableListOf<Cand>()
+        interrupted = false
         detectIn(bitmap, 0, 0, 0f, all)
         val m = minOf(bitmap.width, bitmap.height)
         var tiles = 0
@@ -123,7 +126,7 @@ class FaceEngine(context: Context, private val minConfidence: Float = 0.6f) : Cl
             // Tile-only detections must be confident: weak ones on tiles are mostly face-like patches.
             val tileMinScore = if (intensive) minConfidence else TILE_MIN_SCORE
             for ((x, y) in pts.distinct()) {
-                if (shouldStop()) break
+                if (shouldStop()) { interrupted = true; break }
                 val tile = Bitmap.createBitmap(bitmap, x, y, s, s)
                 detectIn(tile, x, y, tileMinScore, all)
                 tile.recycle()

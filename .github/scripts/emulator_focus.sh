@@ -234,6 +234,88 @@ PY
 open_people; tap_text "Scan photos"; wait_scan; shot 19_after_kill_resume
 soft "scan killed mid-way, then resumed: same final result (2 people, 9 faces)" 19 has "2 people, 9 faces"
 
+# 7c. kill almost immediately after start (early in the scan), then Stop button mid-scan
+adb shell am force-stop $PKG; sleep 1
+adb shell "run-as $PKG sh -c 'rm -f databases/people.db databases/people.db-wal databases/people.db-shm databases/people.db-journal'"
+open_people; tap_text "Scan photos"; adb shell am force-stop $PKG; sleep 2
+dbsnap early > shots/db_early.txt; cat shots/db_early.txt >> $R
+python3 - shots/db_early/people.db >> $R <<'PY'
+import sqlite3,sys
+try:
+    c=sqlite3.connect(sys.argv[1]); ok=c.execute("pragma integrity_check").fetchone()[0]
+    nf=c.execute("select count(*) from faces").fetchone()[0]; ns=c.execute("select count(*) from scanned").fetchone()[0]
+    print(("PASS: " if ok=="ok" else "FAIL: ")+"early kill: DB integrity %s, %d faces, %d scanned photos"%(ok,nf,ns))
+except Exception as e: print("PASS: early kill: DB not yet created or empty (%s), nothing half-written"%e)
+PY
+open_people; tap_text "Scan photos"; sleep 1; tap_text "Stop scanning"; sleep 4
+dump; shot 19b_after_stop
+dbsnap stopped > shots/db_stopped.txt; cat shots/db_stopped.txt >> $R
+python3 - shots/db_stopped/people.db >> $R <<'PY'
+import sqlite3,sys
+c=sqlite3.connect(sys.argv[1]); ok=c.execute("pragma integrity_check").fetchone()[0]
+orph=c.execute("select count(*) from faces f left join people p on p.id=f.person_id where p.id is null").fetchone()[0]
+nf=c.execute("select count(*) from faces").fetchone()[0]; ns=c.execute("select count(*) from scanned").fetchone()[0]
+print(("PASS: " if ok=="ok" and orph==0 else "FAIL: ")+"Stop pressed ~1 s into scan: DB integrity %s, orphans %d, %d faces from %d photos"%(ok,orph,nf,ns))
+PY
+sleep 3; dbsnap stopped2 > /dev/null
+python3 - shots/db_stopped/people.db shots/db_stopped2/people.db >> $R <<'PY'
+import sqlite3,sys
+a,b=[sqlite3.connect(x).execute("select count(*) from faces").fetchone()[0] for x in sys.argv[1:3]]
+print(("PASS: " if a==b else "FAIL: ")+"scan really stopped: face count unchanged after Stop (%d then %d)"%(a,b))
+PY
+tap_text "Scan photos"; wait_scan; shot 19c_after_stop_resume
+soft "after Stop then rescan: same final result (2 people, 9 faces)" 19c has "2 people, 9 faces"
+
+# 7d. hidden developer reset: wrong phrase / cancel change nothing; right phrase clears People data only; reset during a scan
+open_dev() { dump; XY=$(python3 - <<'PY'
+import re,xml.etree.ElementTree as ET
+for n in ET.parse('/tmp/ui.xml').iter('node'):
+    if 'people,' in (n.get('text') or ''):
+        m=re.findall(r'\d+',n.get('bounds'));x1,y1,x2,y2=map(int,m);print((x1+x2)//2,(y1+y2)//2);break
+PY
+); for i in 1 2 3 4 5 6 7; do adb shell input tap $XY; sleep 0.2; done; sleep 2; }
+dbcounts() { dbsnap $1 > /dev/null; python3 - shots/db_$1/people.db <<'PY'
+import sqlite3,sys
+c=sqlite3.connect(sys.argv[1]); print(*[c.execute("select count(*) from "+t).fetchone()[0] for t in ("people","faces","scanned")])
+PY
+}
+open_people; sleep 2
+open_dev; shot 20a_dev_dialog
+need "hidden dev reset dialog opens after 7 taps and shows the warning" 20a has "Type DELETE ALL PEOPLE DATA"
+tap_text CANCEL; sleep 1; adb shell am force-stop $PKG; sleep 1
+C=$(dbcounts devcancel); [ "$C" != "0 0 0" ] && pass "reset dialog cancelled: data unchanged ($C people/faces/scanned)" || echo "FAIL: cancel erased data" >> $R
+open_people; sleep 2; open_dev; tap_text ERASE; sleep 2
+has "Type DELETE ALL PEOPLE DATA" && pass "ERASE with no/wrong phrase keeps the dialog open" || echo "FAIL: wrong phrase closed dialog" >> $R
+adb shell am force-stop $PKG; sleep 1
+C=$(dbcounts devwrong); [ "$C" != "0 0 0" ] && pass "wrong phrase: data unchanged ($C)" || echo "FAIL: wrong phrase erased data" >> $R
+open_people; sleep 2; open_dev
+dump; XY=$(python3 - <<'PY'
+import re,xml.etree.ElementTree as ET
+for n in ET.parse('/tmp/ui.xml').iter('node'):
+    if n.get('class','').endswith('EditText'):
+        m=re.findall(r'\d+',n.get('bounds'));x1,y1,x2,y2=map(int,m);print((x1+x2)//2,(y1+y2)//2);break
+PY
+); adb shell input tap $XY; adb shell input text "DELETE%sALL%sPEOPLE%sDATA"; sleep 1; shot 20b_dev_typed
+tap_text ERASE; sleep 5; shot 20c_dev_erased
+adb shell am force-stop $PKG; sleep 1
+C=$(dbcounts deverased); [ "$C" = "0 0 0" ] && pass "typed phrase: people, faces and scan records all erased (0 0 0)" || echo "FAIL: erase left $C" >> $R
+open_people; tap_text "Scan photos"; wait_scan; shot 20d_after_erase_rescan
+soft "after erase, fresh scan works: 2 people, 9 faces" 20d has "2 people, 9 faces"
+# reset while a scan is running must not be repopulated
+adb shell am force-stop $PKG; sleep 1
+adb shell "run-as $PKG sh -c 'rm -f databases/people.db databases/people.db-wal databases/people.db-shm databases/people.db-journal'"
+open_people; tap_text "Scan photos"; open_dev
+dump; XY=$(python3 - <<'PY'
+import re,xml.etree.ElementTree as ET
+for n in ET.parse('/tmp/ui.xml').iter('node'):
+    if n.get('class','').endswith('EditText'):
+        m=re.findall(r'\d+',n.get('bounds'));x1,y1,x2,y2=map(int,m);print((x1+x2)//2,(y1+y2)//2);break
+PY
+); adb shell input tap $XY; adb shell input text "DELETE%sALL%sPEOPLE%sDATA"; sleep 1; tap_text ERASE; sleep 6
+dbsnap dev_during > /dev/null; C1=$(dbcounts dev_during); sleep 8; C2=$(dbcounts dev_during2)
+[ "$C1" = "0 0 0" ] && [ "$C2" = "0 0 0" ] && pass "reset during a running scan: stays empty, nothing repopulated ($C1 then $C2)" || echo "FAIL: reset during scan left $C1 then $C2" >> $R
+shot 20e_reset_during_scan
+
 # 8. upgrade from a populated v1 database (the schema the delivered 1015/1022 builds use)
 adb shell am force-stop $PKG
 adb shell 'rm -f /sdcard/Pictures/People/*.jpg'
