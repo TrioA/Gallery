@@ -42,7 +42,10 @@ jobs:
             - name: Show APK signer
               run: |
                   APK=$(ls app/build/outputs/apk/foss/debug/*debug.apk | head -1)
-                  "$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs "$APK" | grep -i "SHA-256" || true
+                  BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+                  echo "build-tools: $BT"
+                  "$BT"/apksigner verify --verbose --print-certs "$APK" 2>&1 | tee apksigner.txt
+                  "$BT"/aapt2 dump badging "$APK" 2>&1 | grep -E "^package:|sdkVersion|targetSdk|native-code" | tee badging.txt
                   ls -l "$APK"
 
             - uses: actions/upload-artifact@v4
