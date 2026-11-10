@@ -14,6 +14,7 @@ import java.util.concurrent.CopyOnWriteArraySet
 /** Incremental on-device scan of the photo library. Resumable: finished photos are remembered. */
 object FaceScanner {
     const val MATCH_THRESHOLD = 0.42f
+    const val EXEMPLAR_THRESHOLD = 0.45f
     private const val MAX_SIDE = 1280
 
     @Volatile var running = false
@@ -216,21 +217,28 @@ object FaceScanner {
     }
 
     private fun assign(store: PeopleStore, centroids: MutableList<PeopleStore.Centroid>, path: String, f: FaceEngine.Found) {
+        // A person matches by average face OR by being close to one of their real example faces.
+        // Faces the user confirmed are exemplars, so deliberate corrections steer matching and one
+        // mixed-up average cannot hide a person.
         var best: PeopleStore.Centroid? = null
         var bestSim = -1f
         for (c in centroids) {
-            val s = FaceMath.dot(c.vec, f.embedding)
-            if (s > bestSim) { bestSim = s; best = c }
+            val avg = FaceMath.dot(c.vec, f.embedding)
+            var ex = -1f
+            for (e in c.exemplars) { val d = FaceMath.dot(e, f.embedding); if (d > ex) ex = d }
+            val score = maxOf(if (avg >= MATCH_THRESHOLD) avg else -1f, if (ex >= EXEMPLAR_THRESHOLD) ex else -1f)
+            if (score > bestSim) { bestSim = score; best = c }
         }
         val target: PeopleStore.Centroid
-        if (best != null && bestSim >= MATCH_THRESHOLD) {
+        if (best != null && bestSim > 0f) {
             target = best
             val sum = FloatArray(target.vec.size) { target.vec[it] * target.count + f.embedding[it] }
             target.vec = FaceMath.normalized(sum)
             target.count += 1
+            if (target.exemplars.size < 60) target.exemplars.add(f.embedding)
         } else {
             val id = store.createPerson(f.embedding)
-            target = PeopleStore.Centroid(id, f.embedding.copyOf(), 1)
+            target = PeopleStore.Centroid(id, f.embedding.copyOf(), 1, mutableListOf(f.embedding))
             centroids.add(target)
         }
         store.addFace(path, f.left, f.top, f.right, f.bottom, f.embedding, target.id, f.thumb)

@@ -63,12 +63,28 @@ class PeopleStore private constructor(context: Context) :
     private fun count(sql: String): Int = readableDatabase.rawQuery(sql, null).use { if (it.moveToFirst()) it.getInt(0) else 0 }
 
     // ---- people ----
-    class Centroid(val id: Long, var vec: FloatArray, var count: Int)
+    /** A person as the matcher sees it: average face plus a few real example faces (exemplars). */
+    class Centroid(val id: Long, var vec: FloatArray, var count: Int, val exemplars: MutableList<FloatArray> = mutableListOf())
 
     fun loadCentroids(): MutableList<Centroid> {
         val out = mutableListOf<Centroid>()
         readableDatabase.rawQuery("SELECT id, centroid, face_count FROM people WHERE centroid IS NOT NULL AND face_count > 0", null).use {
             while (it.moveToNext()) out.add(Centroid(it.getLong(0), bytesToFloats(it.getBlob(1)), it.getInt(2)))
+        }
+        // Exemplars: every face the user confirmed or corrected (capped) plus the latest guesses.
+        val byId = out.associateBy { it.id }
+        val confirmedLeft = HashMap<Long, Int>()
+        val guessLeft = HashMap<Long, Int>()
+        readableDatabase.rawQuery("SELECT person_id, emb, confirmed FROM faces ORDER BY confirmed DESC, id DESC", null).use {
+            while (it.moveToNext()) {
+                val c = byId[it.getLong(0)] ?: continue
+                val confirmed = it.getInt(2) == 1
+                val left = if (confirmed) confirmedLeft else guessLeft
+                val n = left.getOrDefault(c.id, 0)
+                if (n >= (if (confirmed) MAX_CONFIRMED_EXEMPLARS else MAX_GUESS_EXEMPLARS)) continue
+                left[c.id] = n + 1
+                c.exemplars.add(bytesToFloats(it.getBlob(1)))
+            }
         }
         return out
     }
@@ -260,6 +276,8 @@ class PeopleStore private constructor(context: Context) :
     }
 
     companion object {
+        const val MAX_CONFIRMED_EXEMPLARS = 40
+        const val MAX_GUESS_EXEMPLARS = 12
         @Volatile
         private var instance: PeopleStore? = null
 
