@@ -120,7 +120,56 @@ object FaceScanner {
         return added
     }
 
-    private fun decodeFile(path: String): Bitmap? {
+    /**
+     * The user pointed at a face the detector missed. Try crops of several sizes around the tap
+     * (normalized 0..1 coordinates of the upright photo) with a very permissive detector.
+     * Returns 1 if a face was added, 2 if that face was already known, 0 if none could be found there, -1 on error.
+     */
+    fun addFaceAt(context: Context, path: String, nx: Float, ny: Float): Int {
+        val app = context.applicationContext
+        val store = PeopleStore.get(app)
+        val bmp = decodeFile(path) ?: return -1
+        try {
+            val cx = nx * bmp.width
+            val cy = ny * bmp.height
+            val m = minOf(bmp.width, bmp.height).toFloat()
+            FaceEngine(app, 0.1f).use { engine ->
+                val centroids = store.loadCentroids()
+                for (frac in floatArrayOf(0.35f, 0.6f, 0.9f)) {
+                    val side = (m * frac).toInt().coerceAtLeast(64)
+                    val x0 = (cx - side / 2f).toInt().coerceIn(0, maxOf(0, bmp.width - side))
+                    val y0 = (cy - side / 2f).toInt().coerceIn(0, maxOf(0, bmp.height - side))
+                    val w = minOf(side, bmp.width - x0)
+                    val h = minOf(side, bmp.height - y0)
+                    val crop = Bitmap.createBitmap(bmp, x0, y0, w, h)
+                    val found = engine.process(crop)
+                    crop.recycle()
+                    val bw = bmp.width.toFloat()
+                    val bh = bmp.height.toFloat()
+                    val hit = found.minByOrNull {
+                        val fx = (x0 + (it.left + it.right) / 2 * w) / bw
+                        val fy = (y0 + (it.top + it.bottom) / 2 * h) / bh
+                        (fx - nx) * (fx - nx) + (fy - ny) * (fy - ny)
+                    } ?: continue
+                    val hcx = (x0 + (hit.left + hit.right) / 2 * w) / bw
+                    val hcy = (y0 + (hit.top + hit.bottom) / 2 * h) / bh
+                    if (store.facesOfPath(path).any { hcx in it.left..it.right && hcy in it.top..it.bottom }) return 2
+                    val moved = FaceEngine.Found(
+                        (x0 + hit.left * w) / bw, (y0 + hit.top * h) / bh,
+                        (x0 + hit.right * w) / bw, (y0 + hit.bottom * h) / bh,
+                        hit.embedding, hit.thumb
+                    )
+                    assign(store, centroids, path, moved)
+                    return 1
+                }
+            }
+            return 0
+        } finally {
+            bmp.recycle()
+        }
+    }
+
+    fun decodeFile(path: String): Bitmap? {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(path, bounds)
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null

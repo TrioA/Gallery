@@ -125,6 +125,11 @@ object PhotoDetailsSheet {
                     }
                 }.start()
             }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = (6 * dp).toInt() })
+            root.addView(button("Mark a missed face") {
+                dialog.dismiss()
+                activity.startActivity(Intent(activity, org.fossify.gallery.activities.MarkFaceActivity::class.java)
+                    .putExtra(org.fossify.gallery.activities.MarkFaceActivity.EXTRA_PATH, path))
+            }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = (6 * dp).toInt() })
             root.addView(status)
         }
         render()

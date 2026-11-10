@@ -107,6 +107,8 @@ jobs:
                   UA="TrioA-Gallery-CI/1.0 (personal fork test)"
                   curl -fL --retry 3 -A "$UA" -o faces/armstrong_1.jpg "https://commons.wikimedia.org/wiki/Special:FilePath/Neil_Armstrong_pose.jpg?width=1200"
                   curl -fL --retry 3 -A "$UA" -o faces/aldrin_1.jpg "https://commons.wikimedia.org/wiki/Special:FilePath/Buzz_Aldrin.jpg?width=1200"
+                  curl -fL --retry 3 -A "$UA" -o faces/armstrong_3.jpg "https://commons.wikimedia.org/wiki/Special:FilePath/Astronaut_Neil_A._Armstrong_(1964).jpg?width=1200" || true
+                  curl -fL --retry 3 -A "$UA" -o faces/armstrong_4.jpg "https://commons.wikimedia.org/wiki/Special:FilePath/Neil_Armstrong_1958_portrait_cropped.jpg?width=1200" || true
                   python3 -c "from PIL import Image; a=Image.open('faces/armstrong_1.jpg'); a.resize((a.width*2//3,a.height*2//3)).save('faces/armstrong_2.jpg',quality=80)" || cp faces/armstrong_1.jpg faces/armstrong_2.jpg
                   ls -l faces
             - name: Make test photos
