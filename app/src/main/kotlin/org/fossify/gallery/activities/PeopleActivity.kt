@@ -150,9 +150,8 @@ class PeopleActivity : SimpleActivity() {
     private fun confirmReset() {
         val input = android.widget.EditText(this).apply { hint = "DELETE ALL PEOPLE DATA"; setSingleLine() }
         val dlg = androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Developer: erase ALL People data?")
             .setMessage(
-                "This permanently erases every People group, name, alias, contact link, face, correction and scan record, " +
+                "DEVELOPER: ERASE ALL PEOPLE DATA?\n\nThis permanently erases every People group, name, alias, contact link, face, correction and scan record, " +
                     "and cannot be undone. Your photos and phone contacts are NOT touched.\n\n" +
                     "Type DELETE ALL PEOPLE DATA to confirm."
             )
