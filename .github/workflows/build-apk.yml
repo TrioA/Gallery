@@ -49,8 +49,44 @@ jobs:
               with:
                   name: gallery-foss-debug
                   path: app/build/outputs/apk/foss/debug/*debug.apk
-                  retention-days: 30
+                  retention-days: 5
 
             - name: Remove key
               if: always()
               run: rm -f "$RUNNER_TEMP/gallery.jks"
+
+    emulator-smoke:
+        needs: build
+        runs-on: ubuntu-latest
+        continue-on-error: true
+        steps:
+            - uses: actions/download-artifact@v4
+              with:
+                  name: gallery-foss-debug
+                  path: apk
+            - name: Enable KVM
+              run: |
+                  echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+                  sudo udevadm control --reload-rules
+                  sudo udevadm trigger --name-match=kvm
+            - name: Make test photos
+              run: |
+                  mkdir -p photos && cd photos
+                  for i in 1 2 3 4 5 6; do
+                    convert -size 800x600 gradient:"hsl($((i*50)),80%,60%)-hsl($((i*50+80)),70%,30%)" -gravity center -pointsize 60 -annotate 0 "Test $i" img_$i.jpg
+                  done
+            - name: Run on emulator and take screenshots
+              uses: reactivecircus/android-emulator-runner@v2
+              with:
+                  api-level: 34
+                  arch: x86_64
+                  target: google_apis
+                  profile: pixel_6
+                  disable-animations: true
+                  script: bash .github/scripts/emulator_shots.sh
+            - uses: actions/upload-artifact@v4
+              if: always()
+              with:
+                  name: emulator-screenshots
+                  path: shots
+                  retention-days: 5

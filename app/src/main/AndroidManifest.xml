@@ -170,6 +170,12 @@
             android:theme="@style/TranslucentTheme" />
 
         <activity
+            android:name=".activities.PeopleActivity"
+            android:configChanges="orientation"
+            android:exported="false"
+            android:label="@string/tab_people" />
+
+        <activity
             android:name=".activities.IncludedFoldersActivity"
             android:configChanges="orientation"
             android:exported="false"

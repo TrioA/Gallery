@@ -129,6 +129,7 @@ import org.fossify.gallery.helpers.MediaFetcher
 import org.fossify.gallery.helpers.PICKED_PATHS
 import org.fossify.gallery.helpers.RECYCLE_BIN
 import org.fossify.gallery.helpers.SET_WALLPAPER_INTENT
+import org.fossify.gallery.helpers.GalleryTabs
 import org.fossify.gallery.helpers.SHOW_ALL
 import org.fossify.gallery.helpers.SHOW_TEMP_HIDDEN_DURATION
 import org.fossify.gallery.helpers.SKIP_AUTHENTICATION
@@ -291,6 +292,10 @@ class MainActivity : SimpleActivity(), DirectoryOperationsListener {
     override fun onResume() {
         super.onResume()
         updateMenuColors()
+        GalleryTabs.bind(
+            this, binding.bottomTabs, binding.directoriesHolder, GalleryTabs.ALBUMS,
+            visible = !mIsThirdPartyIntent
+        )
         config.isThirdPartyIntent = false
         mDateFormat = config.dateFormat
         mTimeFormat = getTimeFormat()

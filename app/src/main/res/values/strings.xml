@@ -303,4 +303,9 @@
         Haven't found some strings? There's more at
         https://github.com/FossifyOrg/Commons/tree/master/commons/src/main/res
     -->
+    <!-- Bottom tabs -->
+    <string name="tab_pictures">Pictures</string>
+    <string name="tab_people">People</string>
+    <string name="tab_albums">Albums</string>
+    <string name="people_coming_soon">People will appear here once face recognition is added.</string>
 </resources>

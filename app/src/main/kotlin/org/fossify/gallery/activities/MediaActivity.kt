@@ -98,6 +98,7 @@ import org.fossify.gallery.helpers.PATH
 import org.fossify.gallery.helpers.PICKED_PATHS
 import org.fossify.gallery.helpers.RECYCLE_BIN
 import org.fossify.gallery.helpers.SET_WALLPAPER_INTENT
+import org.fossify.gallery.helpers.GalleryTabs
 import org.fossify.gallery.helpers.SHOW_ALL
 import org.fossify.gallery.helpers.SHOW_FAVORITES
 import org.fossify.gallery.helpers.SHOW_RECYCLE_BIN
@@ -429,6 +430,11 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
             mStoredRoundedCorners = fileRoundedCorners
             mShowAll = showAll && mPath != RECYCLE_BIN
         }
+
+        GalleryTabs.bind(
+            this, binding.bottomTabs, binding.mediaHolder, GalleryTabs.PICTURES,
+            visible = mShowAll && !mIsGetImageIntent && !mIsGetVideoIntent && !mIsGetAnyIntent
+        )
     }
 
     private fun searchQueryChanged(text: String) {

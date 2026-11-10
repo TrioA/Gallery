@@ -89,7 +89,7 @@ class Config(context: Context) : BaseConfig(context) {
         set(pinnedFolders) = prefs.edit().putStringSet(PINNED_FOLDERS, pinnedFolders).apply()
 
     var showAll: Boolean
-        get() = prefs.getBoolean(SHOW_ALL, false)
+        get() = prefs.getBoolean(SHOW_ALL, true)
         set(showAll) = prefs.edit().putBoolean(SHOW_ALL, showAll).apply()
 
     fun addPinnedFolders(paths: Set<String>) {
