@@ -349,12 +349,12 @@ soft "after interrupted-photo Stop, rescan completes: 2 people, 9 faces" 19d has
 wipedb; setdelay 3000; adb logcat -c
 open_people; tap_text "Scan photos"; sleep 4
 open_dev; phrase; shot 19f_before_erase
-echo "INFO: running-at-ERASE evidence is screenshot 19f_before_erase.png (the dialog hides the status line from the UI dump, so it cannot be asserted by text)" >> $R
+echo "NOT PROVEN (scan was mid-photo at ERASE): only 0-of-10 shown; screenshot screenshot 19f_before_erase.png (the dialog hides the status line from the UI dump, so it cannot be asserted by text)" >> $R
 tap_text ERASE; sleep 1
 adb logcat -d -s FaceScan:W > shots/reset_inflight_log0.txt
 sleep 10
 adb logcat -d -s FaceScan:W > shots/reset_inflight_log.txt
-echo "INFO: stop/abort log lines at reset: $(grep -c -E 'abort: reset|interrupted photo' shots/reset_inflight_log.txt) (may be 0 if Stop landed before the first photo started)" >> $R
+echo "NOT PROVEN (in-flight photo at reset): stop/abort log lines at reset: $(grep -c -E 'abort: reset|interrupted photo' shots/reset_inflight_log.txt) (may be 0 if Stop landed before the first photo started)" >> $R
 adb shell am force-stop $PKG; sleep 1
 C=$(dbcounts resetinflight); [ "$C" = "0 0 0" ] && pass "reset with a photo in flight: 0 people, 0 faces, 0 scanned 10 s later ($C)" || echo "FAIL: in-flight reset left $C" >> $R
 setdelay 0
