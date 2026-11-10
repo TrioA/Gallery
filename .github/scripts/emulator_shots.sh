@@ -53,6 +53,9 @@ shoot_theme() {
   NAME=$1
   adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1
   sleep 10
+  adb logcat -d -t 400 > shots/${NAME}_log.txt || true
+  adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumed' > shots/${NAME}_top.txt || true
+  adb shell run-as $PKG ls -la shared_prefs > shots/${NAME}_prefs.txt 2>&1 || true
   adb exec-out screencap -p > shots/${NAME}_1_start.png
   tap_text Pictures; sleep 4; adb exec-out screencap -p > shots/${NAME}_2_pictures.png
   tap_text People; sleep 4; adb exec-out screencap -p > shots/${NAME}_3_people.png
