@@ -43,11 +43,21 @@ jobs:
                   sha256sum app/src/main/assets/*.tflite
                   ls -l app/src/main/assets
 
-            - name: Build foss debug APK
+            - name: Build emulator (x86_64) APK
               env:
                   SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
                   SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
-              run: ./gradlew assembleFossDebug --no-daemon -PVERSION_CODE=$((1000 + ${{ github.run_number }})) -PVERSION_NAME=1.14.2-trio.${{ github.run_number }}
+              run: |
+                  ./gradlew assembleFossDebug --no-daemon -PABI=x86_64 -PVERSION_CODE=$((1000 + ${{ github.run_number }})) -PVERSION_NAME=1.14.2-trio.${{ github.run_number }}
+                  mkdir -p emu
+                  cp app/build/outputs/apk/foss/debug/*debug.apk emu/
+                  rm -f app/build/outputs/apk/foss/debug/*debug.apk
+
+            - name: Build foss debug APK (arm64-v8a, for phones)
+              env:
+                  SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+                  SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+              run: ./gradlew assembleFossDebug --no-daemon -PABI=arm64-v8a -PVERSION_CODE=$((1000 + ${{ github.run_number }})) -PVERSION_NAME=1.14.2-trio.${{ github.run_number }}
 
             - name: Show APK signer
               run: |
@@ -66,6 +76,12 @@ jobs:
                   path: app/build/outputs/apk/foss/debug/*debug.apk
                   retention-days: 5
 
+            - uses: actions/upload-artifact@v4
+              with:
+                  name: gallery-emulator-x86_64
+                  path: emu/*debug.apk
+                  retention-days: 2
+
             - name: Remove key
               if: always()
               run: rm -f "$RUNNER_TEMP/gallery.jks"
@@ -78,7 +94,7 @@ jobs:
             - uses: actions/checkout@v4
             - uses: actions/download-artifact@v4
               with:
-                  name: gallery-foss-debug
+                  name: gallery-emulator-x86_64
                   path: apk
             - name: Enable KVM
               run: |

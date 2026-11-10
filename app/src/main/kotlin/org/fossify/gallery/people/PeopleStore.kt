@@ -180,6 +180,61 @@ class PeopleStore private constructor(context: Context) :
         }
     }
 
+    // ---- per-photo faces and corrections ----
+    class FaceRow(val id: Long, val personId: Long, val thumb: ByteArray?, val confirmed: Boolean,
+                  val left: Float, val top: Float, val right: Float, val bottom: Float)
+
+    fun facesOfPath(path: String): List<FaceRow> {
+        val out = mutableListOf<FaceRow>()
+        readableDatabase.rawQuery(
+            "SELECT id, person_id, thumb, confirmed, box_l, box_t, box_r, box_b FROM faces WHERE path=? ORDER BY box_l",
+            arrayOf(path)
+        ).use {
+            while (it.moveToNext()) {
+                out.add(FaceRow(it.getLong(0), it.getLong(1), it.getBlob(2), it.getInt(3) == 1,
+                    it.getFloat(4), it.getFloat(5), it.getFloat(6), it.getFloat(7)))
+            }
+        }
+        return out
+    }
+
+    fun confirmFace(faceId: Long) {
+        val v = ContentValues().apply { put("confirmed", 1) }
+        writableDatabase.update("faces", v, "id=?", arrayOf(faceId.toString()))
+    }
+
+    /** Recompute a person's centroid and face count from its faces. */
+    fun recomputeCentroid(personId: Long) {
+        val embs = mutableListOf<FloatArray>()
+        readableDatabase.rawQuery("SELECT emb FROM faces WHERE person_id=?", arrayOf(personId.toString())).use {
+            while (it.moveToNext()) embs.add(bytesToFloats(it.getBlob(0)))
+        }
+        if (embs.isEmpty()) {
+            val v = ContentValues().apply { put("face_count", 0) }
+            writableDatabase.update("people", v, "id=?", arrayOf(personId.toString()))
+            return
+        }
+        val sum = FloatArray(embs[0].size)
+        for (e in embs) for (i in sum.indices) sum[i] += e[i]
+        updateCentroid(personId, FaceMath.normalized(sum), embs.size)
+    }
+
+    /** User says this face belongs to another person (or a new one when [toPersonId] is 0). Returns the target id. */
+    fun moveFace(faceId: Long, toPersonId: Long): Long {
+        var fromId = -1L
+        var emb: FloatArray? = null
+        readableDatabase.rawQuery("SELECT person_id, emb FROM faces WHERE id=?", arrayOf(faceId.toString())).use {
+            if (it.moveToFirst()) { fromId = it.getLong(0); emb = bytesToFloats(it.getBlob(1)) }
+        }
+        val e = emb ?: return toPersonId
+        val target = if (toPersonId == 0L) createPerson(e) else toPersonId
+        val v = ContentValues().apply { put("person_id", target); put("confirmed", 1) }
+        writableDatabase.update("faces", v, "id=?", arrayOf(faceId.toString()))
+        recomputeCentroid(target)
+        if (fromId > 0) recomputeCentroid(fromId)
+        return target
+    }
+
     companion object {
         @Volatile
         private var instance: PeopleStore? = null

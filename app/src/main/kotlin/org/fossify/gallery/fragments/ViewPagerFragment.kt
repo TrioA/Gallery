@@ -39,6 +39,8 @@ abstract class ViewPagerFragment : Fragment() {
         fun isSlideShowActive(): Boolean
 
         fun isFullScreen(): Boolean
+
+        fun onSwipeUp() {}
     }
 
     fun getMediumExtendedDetails(medium: Medium): String {
@@ -174,6 +176,9 @@ abstract class ViewPagerFragment : Fragment() {
                 if (!mIgnoreCloseDown && (Math.abs(diffY) > Math.abs(diffX)) && (diffY < -mCloseDownThreshold) && downGestureDuration < MAX_CLOSE_DOWN_GESTURE_DURATION && context?.config?.allowDownGesture == true) {
                     activity?.finish()
                     activity?.overridePendingTransition(0, org.fossify.commons.R.anim.slide_down)
+                }
+                if (!mIgnoreCloseDown && (Math.abs(diffY) > Math.abs(diffX)) && diffY > mCloseDownThreshold * 1.5f && downGestureDuration < MAX_CLOSE_DOWN_GESTURE_DURATION * 2) {
+                    listener?.onSwipeUp()
                 }
                 mIgnoreCloseDown = false
             }

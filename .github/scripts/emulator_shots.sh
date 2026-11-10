@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -x
 mkdir -p shots
-APK=$(ls apk/*x86_64*debug.apk | head -1)
+APK=$(ls apk/*debug.apk | head -1)
 PKG=org.fossify.gallery.debug
 adb install -r "$APK"
 adb shell mkdir -p /sdcard/DCIM/Camera /sdcard/Pictures/Trips /sdcard/Pictures/Family
@@ -86,6 +86,9 @@ shoot_theme() {
   tap_text Albums; sleep 4; adb exec-out screencap -p > shots/${NAME}_4_albums.png
   tap_text Family; sleep 4; adb exec-out screencap -p > shots/${NAME}_5_folder.png
   adb shell input tap 180 420; sleep 4; adb exec-out screencap -p > shots/${NAME}_6_viewer.png
+  adb shell input swipe 540 1700 540 600 150; sleep 4; adb exec-out screencap -p > shots/${NAME}_6b_swipe_up.png
+  adb shell input keyevent KEYCODE_BACK; sleep 2
+  adb exec-out screencap -p > shots/${NAME}_6c_after_sheet_back.png
   adb shell input keyevent KEYCODE_BACK; sleep 3; adb exec-out screencap -p > shots/${NAME}_7_back_to_folder.png
   adb shell input keyevent KEYCODE_BACK; sleep 3; adb exec-out screencap -p > shots/${NAME}_8_back_to_albums.png
   tap_text Pictures; sleep 4

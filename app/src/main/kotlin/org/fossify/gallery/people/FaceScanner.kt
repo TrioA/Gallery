@@ -99,6 +99,52 @@ object FaceScanner {
         }
     }
 
+    /** Re-examine one photo with a more sensitive detector and add faces not already known. Blocking. */
+    fun rescanPhoto(context: Context, path: String): Int {
+        val app = context.applicationContext
+        val store = PeopleStore.get(app)
+        val existing = store.facesOfPath(path)
+        val bmp = decodeFile(path) ?: return 0
+        var added = 0
+        FaceEngine(app, 0.3f).use { engine ->
+            val centroids = store.loadCentroids()
+            for (f in engine.process(bmp)) {
+                val cx = (f.left + f.right) / 2
+                val cy = (f.top + f.bottom) / 2
+                if (existing.any { cx in it.left..it.right && cy in it.top..it.bottom }) continue
+                assign(store, centroids, path, f)
+                added++
+            }
+        }
+        bmp.recycle()
+        return added
+    }
+
+    private fun decodeFile(path: String): Bitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(path, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        var sample = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= MAX_SIDE) sample *= 2
+        val opts = BitmapFactory.Options().apply { inSampleSize = sample; inPreferredConfig = Bitmap.Config.ARGB_8888 }
+        val bmp = BitmapFactory.decodeFile(path, opts) ?: return null
+        val orientation = try {
+            ExifInterface(path).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+        } catch (e: Exception) {
+            ExifInterface.ORIENTATION_NORMAL
+        }
+        val m = Matrix()
+        when (orientation) {
+            ExifInterface.ORIENTATION_ROTATE_90 -> m.postRotate(90f)
+            ExifInterface.ORIENTATION_ROTATE_180 -> m.postRotate(180f)
+            ExifInterface.ORIENTATION_ROTATE_270 -> m.postRotate(270f)
+            else -> return bmp
+        }
+        val rotated = Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
+        if (rotated != bmp) bmp.recycle()
+        return rotated
+    }
+
     private fun assign(store: PeopleStore, centroids: MutableList<PeopleStore.Centroid>, path: String, f: FaceEngine.Found) {
         var best: PeopleStore.Centroid? = null
         var bestSim = -1f

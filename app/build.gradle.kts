@@ -40,14 +40,10 @@ android {
         targetSdk = project.libs.versions.app.build.targetSDK.get().toInt()
         versionName = project.property("VERSION_NAME").toString()
         versionCode = baseVersionCode
-    }
-
-    splits {
-        abi {
-            isEnable = true
-            reset()
-            include("arm64-v8a", "x86_64")
-            isUniversalApk = false
+        (project.findProperty("ABI") as String?)?.let { abi ->
+            ndk {
+                abiFilters.add(abi)
+            }
         }
     }
 

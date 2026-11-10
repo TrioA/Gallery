@@ -928,6 +928,13 @@ class ViewPagerActivity : BaseViewerActivity(), ViewPager.OnPageChangeListener, 
 
     private fun getCurrentFragment() = (binding.viewPager.adapter as? MyPagerAdapter)?.getCurrentFragment(binding.viewPager.currentItem)
 
+    override fun onSwipeUp() {
+        val path = getCurrentPath()
+        if (path.isNotEmpty() && getCurrentMedium() != null) {
+            org.fossify.gallery.people.PhotoDetailsSheet.show(this, path) { showProperties() }
+        }
+    }
+
     private fun showProperties() {
         if (getCurrentMedium() != null) {
             PropertiesDialog(this, getCurrentPath(), false)

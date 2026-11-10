@@ -22,7 +22,7 @@ import java.nio.ByteOrder
  * (AuraFace glintr100 TFLite). Everything runs locally; nothing is uploaded.
  * The embedder is isolated here so a different model can be swapped in.
  */
-class FaceEngine(context: Context) : Closeable {
+class FaceEngine(context: Context, minConfidence: Float = 0.6f) : Closeable {
 
     class Found(
         val left: Float, val top: Float, val right: Float, val bottom: Float,
@@ -37,7 +37,7 @@ class FaceEngine(context: Context) : Closeable {
     init {
         val options = FaceDetector.FaceDetectorOptions.builder()
             .setBaseOptions(BaseOptions.builder().setModelAssetPath(DETECTOR_ASSET).build())
-            .setMinDetectionConfidence(0.6f)
+            .setMinDetectionConfidence(minConfidence)
             .setRunningMode(RunningMode.IMAGE)
             .build()
         detector = FaceDetector.createFromOptions(context.applicationContext, options)
