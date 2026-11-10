@@ -4,6 +4,8 @@ import android.content.Intent
 import android.content.pm.ShortcutInfo
 import android.content.pm.ShortcutManager
 import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.GradientDrawable
+import android.view.ViewOutlineProvider
 import android.graphics.drawable.Icon
 import android.text.TextUtils
 import android.view.Menu
@@ -66,6 +68,7 @@ import org.fossify.commons.views.MyRecyclerView
 import org.fossify.gallery.R
 import org.fossify.gallery.activities.MediaActivity
 import org.fossify.gallery.databinding.DirectoryItemGridRoundedCornersBinding
+import org.fossify.gallery.databinding.DirectoryItemAlbumCoverBinding
 import org.fossify.gallery.databinding.DirectoryItemGridSquareBinding
 import org.fossify.gallery.databinding.DirectoryItemListBinding
 import org.fossify.gallery.dialogs.ConfirmDeleteFolderDialog
@@ -125,6 +128,9 @@ class DirectoryAdapter(
     private val isListViewType = config.viewTypeFolders == VIEW_TYPE_LIST
     private var pinnedFolders = config.pinnedFolders
     private var scrollHorizontally = config.scrollHorizontally
+    private val useCoverCards = !isListViewType && !scrollHorizontally && folderStyleForCover(config.folderStyle) && config.dirColumnCnt <= 2
+
+    private fun folderStyleForCover(style: Int) = style == FOLDER_STYLE_ROUNDED_CORNERS
     private var animateGifs = config.animateGifs
     private var cropThumbnails = config.cropThumbnails
     private var groupDirectSubfolders = config.groupDirectSubfolders
@@ -151,9 +157,19 @@ class DirectoryAdapter(
         val binding = when {
             isListViewType -> DirectoryItemListBinding.inflate(layoutInflater, parent, false)
             folderStyle == FOLDER_STYLE_SQUARE -> DirectoryItemGridSquareBinding.inflate(layoutInflater, parent, false)
+            useCoverCards -> DirectoryItemAlbumCoverBinding.inflate(layoutInflater, parent, false)
             else -> DirectoryItemGridRoundedCornersBinding.inflate(layoutInflater, parent, false)
         }
 
+        if (useCoverCards) {
+            val dp = activity.resources.displayMetrics.density
+            binding.root.background = GradientDrawable().apply {
+                cornerRadius = 18 * dp
+                setColor(activity.getProperBackgroundColor())
+            }
+            binding.root.outlineProvider = ViewOutlineProvider.BACKGROUND
+            binding.root.clipToOutline = true
+        }
         return createViewHolder(binding.root)
     }
 
@@ -914,6 +930,19 @@ class DirectoryAdapter(
                 dirLocation.setImageResource(if (directory.location == LOCATION_SD) org.fossify.commons.R.drawable.ic_sd_card_vector else org.fossify.commons.R.drawable.ic_usb_vector)
             }
 
+            val caption = root.findViewById<View>(R.id.album_caption_surface)
+            if (caption != null) {
+                caption.visibility = if (scrollHorizontally) View.GONE else View.VISIBLE
+                caption.setBackgroundColor(0xCC000000.toInt())
+                if (scrollHorizontally) {
+                    // Horizontal folder layouts retain their original title/count placement.
+                    (dirName.layoutParams as RelativeLayout.LayoutParams).bottomMargin = 0
+                } else {
+                    (dirName.layoutParams as RelativeLayout.LayoutParams).bottomMargin =
+                        ((if (showMediaCount == FOLDER_MEDIA_CNT_LINE) 30 else 14) * activity.resources.displayMetrics.density).toInt()
+                }
+            }
+
             photoCnt.text = directory.subfoldersMediaCount.toString()
             photoCnt.beVisibleIf(showMediaCount == FOLDER_MEDIA_CNT_LINE)
 
@@ -939,6 +968,12 @@ class DirectoryAdapter(
                 photoCnt.setTextColor(textColor)
                 dirName.setTextColor(textColor)
                 dirLocation.applyColorFilter(textColor)
+            }
+            if (caption != null) {
+                // A flat scrim protects captions regardless of the photograph and theme.
+                dirName.setTextColor(android.graphics.Color.WHITE)
+                photoCnt.setTextColor(android.graphics.Color.WHITE)
+                dirLocation.applyColorFilter(android.graphics.Color.WHITE)
             }
 
             if (isListViewType) {
@@ -990,6 +1025,7 @@ class DirectoryAdapter(
         return when {
             isListViewType -> DirectoryItemListBinding.bind(view).toItemBinding()
             folderStyle == FOLDER_STYLE_SQUARE -> DirectoryItemGridSquareBinding.bind(view).toItemBinding()
+            useCoverCards -> DirectoryItemAlbumCoverBinding.bind(view).toItemBinding()
             else -> DirectoryItemGridRoundedCornersBinding.bind(view).toItemBinding()
         }
     }

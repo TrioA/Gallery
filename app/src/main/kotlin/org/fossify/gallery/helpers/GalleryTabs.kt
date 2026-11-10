@@ -36,16 +36,19 @@ object GalleryTabs {
 
         val primary = activity.getProperPrimaryColor()
         val text = activity.getProperTextColor()
+        val bg = activity.getProperBackgroundColor()
+        val pillColor = ColorUtils.blendARGB(bg, text, 0.10f)
+        val indicator = (primary and 0x00FFFFFF) or 0x33000000
+        val readableAccent = ThemeContrast.textAccent(primary, ColorUtils.compositeColors(indicator, pillColor))
         val tint = ColorStateList(
             arrayOf(intArrayOf(android.R.attr.state_selected), intArrayOf()),
-            intArrayOf(primary, text)
+            intArrayOf(readableAccent, text)
         )
-        val bg = activity.getProperBackgroundColor()
         val dp = activity.resources.displayMetrics.density
         // Floating pill: background nudged toward the text color so it reads on any theme.
         val pill = GradientDrawable().apply {
             cornerRadius = 32 * dp
-            setColor(ColorUtils.blendARGB(bg, text, 0.10f))
+            setColor(pillColor)
         }
         nav.background = pill
         nav.elevation = 10 * dp
@@ -56,7 +59,7 @@ object GalleryTabs {
         }
         nav.itemIconTintList = tint
         nav.itemTextColor = tint
-        nav.itemActiveIndicatorColor = ColorStateList.valueOf((primary and 0x00FFFFFF) or 0x33000000)
+        nav.itemActiveIndicatorColor = ColorStateList.valueOf(indicator)
 
         nav.setOnItemSelectedListener { item ->
             if (item.itemId != selected) {

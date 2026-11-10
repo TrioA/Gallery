@@ -53,11 +53,24 @@
             android:textSize="@dimen/bigger_text_size"
             android:visibility="gone" />
 
+        <org.fossify.commons.views.MyTextView
+            android:id="@+id/albums_heading"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_below="@id/directories_switch_searching"
+            android:text="@string/tab_albums"
+            android:textSize="28sp"
+            android:fontFamily="sans-serif-medium"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="16dp"
+            android:paddingBottom="16dp" />
+
         <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
             android:id="@+id/directories_refresh_layout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_below="@+id/directories_switch_searching">
+            android:layout_below="@id/albums_heading">
 
             <com.qtalk.recyclerviewfastscroller.RecyclerViewFastScroller
                 android:id="@+id/directories_fastscroller"

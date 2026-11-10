@@ -21,6 +21,8 @@ import org.fossify.commons.helpers.NavigationIcon
 import org.fossify.gallery.R
 import org.fossify.gallery.databinding.ActivityPeopleBinding
 import org.fossify.gallery.helpers.GalleryTabs
+import org.fossify.gallery.helpers.ThemeContrast
+import org.fossify.commons.extensions.getProperBackgroundColor
 import org.fossify.gallery.people.FaceScanner
 import org.fossify.gallery.people.PeopleStore
 import org.fossify.gallery.people.Person
@@ -75,7 +77,7 @@ class PeopleActivity : SimpleActivity() {
         }
         binding.peopleScan.setTextColor(primary.getContrastColor())
         binding.peopleSuggest.background = GradientDrawable().apply { cornerRadius = 100f; setStroke(3, primary); setColor(0) }
-        binding.peopleSuggest.setTextColor(primary)
+        binding.peopleSuggest.setTextColor(ThemeContrast.textAccent(primary, getProperBackgroundColor()))
         binding.peopleStatus.setTextColor(getProperTextColor())
         binding.peoplePlaceholder.setTextColor(getProperTextColor())
         GalleryTabs.bind(this, binding.bottomTabs, binding.peopleHolder, R.id.tab_people, true)
@@ -145,7 +147,7 @@ class PeopleActivity : SimpleActivity() {
         binding.peopleSelectBar.visibility = if (on) View.VISIBLE else View.GONE
         binding.peopleMerge.text = "Merge ${selected.size} into one"
         val primary = getProperPrimaryColor()
-        for (t in listOf(binding.peopleSimilar, binding.peopleCancelSelect)) t.setTextColor(primary)
+        for (t in listOf(binding.peopleSimilar, binding.peopleCancelSelect)) t.setTextColor(ThemeContrast.textAccent(primary, getProperBackgroundColor()))
         binding.peopleMerge.background = GradientDrawable().apply { cornerRadius = 100f; setColor(primary) }
         binding.peopleMerge.setTextColor(primary.getContrastColor())
     }
@@ -218,6 +220,11 @@ class PeopleActivity : SimpleActivity() {
             .setNegativeButton("CANCEL", null)
             .create()
         dlg.setOnShowListener {
+            val surface = android.util.TypedValue()
+            dlg.context.theme.resolveAttribute(android.R.attr.colorBackground, surface, true)
+            val accent = ThemeContrast.textAccent(getProperPrimaryColor(), surface.data)
+            dlg.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setTextColor(accent)
+            dlg.getButton(androidx.appcompat.app.AlertDialog.BUTTON_NEGATIVE).setTextColor(accent)
             dlg.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 if (input.text.toString().trim() != "DELETE ALL PEOPLE DATA") {
                     input.error = "Type the exact phrase"

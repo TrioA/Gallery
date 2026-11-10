@@ -338,6 +338,8 @@ class MainActivity : SimpleActivity(), DirectoryOperationsListener {
             timeFormat = getTimeFormat()
         }
 
+        binding.albumsHeading.setTextColor(getProperTextColor())
+        binding.albumsHeading.visibility = if (config.scrollHorizontally) View.GONE else View.VISIBLE
         binding.directoriesEmptyPlaceholder.setTextColor(getProperTextColor())
         binding.directoriesEmptyPlaceholder2.setTextColor(primaryColor)
         binding.directoriesSwitchSearching.setTextColor(primaryColor)
