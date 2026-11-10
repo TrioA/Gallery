@@ -15,4 +15,4 @@ def png(path, w, h, color):
         return c + struct.pack('>I', zlib.crc32(t + d) & 0xffffffff)
     open(path, 'wb').write(b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(rows)) + chunk(b'IEND', b''))
 for i in range(1, 13):
-    png(f'photos/img_{i}.png', 600, 400, (i * 40 % 256, 255 - i * 30, 120))
+    png(f'photos/img_{i}.png', 600, 400, (i * 40 % 256, (255 - i * 20) % 256, (60 + i * 15) % 256))
