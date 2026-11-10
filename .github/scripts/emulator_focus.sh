@@ -9,18 +9,19 @@ PKG=org.fossify.gallery.debug
 python3 - <<'PY' >> $R 2>&1 || { echo "FAIL: fixture validation" >> $R; exit 0; }
 from PIL import Image
 d=lambda f: Image.open(f).size
-a1,a2,a3,a4,al,m,t=[d(f) for f in ['faces/armstrong_1.jpg','faces/armstrong_2.jpg','faces/armstrong_3.jpg','faces/armstrong_4.jpg','faces/aldrin_1.jpg','focus/multi.jpg','focus/tiny.jpg']]
+a1,a2,a3,a4,al,m,mf,t=[d(f) for f in ['faces/armstrong_1.jpg','faces/armstrong_2.jpg','faces/armstrong_3.jpg','faces/armstrong_4.jpg','faces/aldrin_1.jpg','focus/multi.jpg','focus/multi_full.jpg','focus/tiny.jpg']]
 assert a2[0] < a1[0] and a2[1] < a1[1], ("armstrong_2 must be a real downscale", a1, a2)
 import hashlib
 h=lambda f: hashlib.md5(open(f,"rb").read()).hexdigest()
 assert len({h(f) for f in ["faces/armstrong_1.jpg","faces/armstrong_3.jpg","faces/armstrong_4.jpg","faces/aldrin_1.jpg"]}) == 4, "portraits must be 4 different files"
 assert m == (1200, 600), ("multi must be two head crops side by side", m)
 assert t == (1600, 1200), ("tiny canvas", t)
-print("PASS: fixtures valid", dict(a1=a1,a2=a2,a3=a3,a4=a4,aldrin=al,multi=m,tiny=t))
+assert mf[0] > mf[1] and mf[0] > a1[0], ("multi_full must be two FULL portraits side by side", mf)
+print("PASS: fixtures valid", dict(mf=mf,a1=a1,a2=a2,a3=a3,a4=a4,aldrin=al,multi=m,tiny=t))
 PY
 adb install -r "$APK"
 adb shell mkdir -p /sdcard/Pictures/People
-for f in faces/armstrong_1.jpg faces/armstrong_2.jpg faces/armstrong_3.jpg faces/armstrong_4.jpg faces/aldrin_1.jpg focus/multi.jpg focus/tiny.jpg; do
+for f in faces/armstrong_1.jpg faces/armstrong_2.jpg faces/armstrong_3.jpg faces/armstrong_4.jpg faces/aldrin_1.jpg focus/multi.jpg focus/multi_full.jpg focus/tiny.jpg; do
   adb push $f /sdcard/Pictures/People/ >/dev/null
   adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "file:///sdcard/Pictures/People/$(basename $f)" >/dev/null
 done
@@ -82,13 +83,18 @@ need "People screen open" 01 has "Scan photos"
 tap_text "Scan photos"
 need "scan finished" 02 wait_scan
 shot 02_scanned
-need "2 people, 7 faces after scan (3 distinct Armstrong photos+copy, Aldrin, 2 in multi.jpg; tiny.jpg none)" 03 has "2 people, 7 faces"
+need "2 people, 9 faces after scan (Armstrong x4 files incl. a real downscale, Aldrin, 2 in multi.jpg head crops, 2 in multi_full.jpg full portraits via tiled detection; tiny.jpg none)" 03 has "2 people, 9 faces"
 
 # 2. multi-person photo
 open_photo multi.jpg; sheet; shot 04_multi_sheet
 need "multi-person photo lists 2 faces" 04 test "$(count_text 'Guessed, not confirmed')" = 2
 
+# 2b. regression: original full-portrait group photo (whole-frame detector alone misses both faces)
+open_photo multi_full.jpg; sheet; shot 04b_multifull_sheet
+need "full-portrait group photo lists 2 faces (needs tiled detection)" 04b test "$(count_text 'Guessed, not confirmed')" = 2
+
 # 3. confirm one guess
+open_photo multi.jpg; sheet
 tap_text Correct; sleep 2; shot 05_confirmed
 need "Correct marks a face as Confirmed by you" 05 has "Confirmed by you"
 need "other face still a guess" 05 has "Guessed, not confirmed"
@@ -98,7 +104,7 @@ open_photo tiny.jpg; sheet; shot 06_tiny_sheet
 need "tiny photo has no detected face" 06 has "No faces found yet"
 tap_text "Mark a missed face"; sleep 3
 need "mark screen open" 07 top_has MarkFaceActivity
-adb shell input tap 540 1190; sleep 10; shot 07_after_mark
+adb shell input tap 540 1160; sleep 10; shot 07_after_mark
 open_photo tiny.jpg; sheet; shot 08_tiny_after
 need "manually marked face now listed" 08 lacks "No faces found yet"
 adb shell am force-stop $PKG; open_photo tiny.jpg; sheet
@@ -140,7 +146,7 @@ need "revoked: stored faces/people/confirmed/contacts/scanned counts unchanged" 
 adb shell pm grant $PKG android.permission.READ_MEDIA_IMAGES
 adb shell appops set --uid $PKG MANAGE_EXTERNAL_STORAGE allow
 open_people; sleep 5; shot 12_restored_people
-need "restored: People screen shows same people and faces" 12 has "2 people, 7 faces"
+need "restored: People screen shows same people and faces" 12 has "2 people, 9 faces"
 adb shell input tap 160 650; sleep 4
 need "restored: contact link still there" 12b has "linked to contact Test_Person"
 echo "NOTE: scanner behaviour with revoked access is not reachable from the UI (People needs the app open); checked by launch + DB counts only" >> $R

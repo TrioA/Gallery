@@ -22,7 +22,7 @@ import java.nio.ByteOrder
  * (AuraFace glintr100 TFLite). Everything runs locally; nothing is uploaded.
  * The embedder is isolated here so a different model can be swapped in.
  */
-class FaceEngine(context: Context, minConfidence: Float = 0.6f) : Closeable {
+class FaceEngine(context: Context, private val minConfidence: Float = 0.6f) : Closeable {
 
     class Found(
         val left: Float, val top: Float, val right: Float, val bottom: Float,
@@ -50,26 +50,86 @@ class FaceEngine(context: Context, minConfidence: Float = 0.6f) : Closeable {
         embDim = interpreter.getOutputTensor(0).shape().last()
     }
 
+    /** A detected face in full-bitmap pixel coordinates, with the BlazeFace landmarks we align by. */
+    private class Cand(
+        val score: Float, val left: Float, val top: Float, val right: Float, val bottom: Float,
+        val rEyeX: Float, val rEyeY: Float, val lEyeX: Float, val lEyeY: Float, val mouthX: Float, val mouthY: Float,
+    ) {
+        fun cx() = (left + right) / 2
+        fun cy() = (top + bottom) / 2
+        fun contains(x: Float, y: Float) = x in left..right && y in top..bottom
+    }
+
+    private fun detectIn(src: Bitmap, ox: Int, oy: Int, minScore: Float, out: MutableList<Cand>) {
+        val w = src.width.toFloat()
+        val h = src.height.toFloat()
+        for (det in detector.detect(BitmapImageBuilder(src).build()).detections()) {
+            val box = det.boundingBox()
+            val kps = det.keypoints()
+            if (!kps.isPresent || kps.get().size < 4) continue
+            val k = kps.get()
+            // BlazeFace order: right eye, left eye, nose tip, mouth centre (normalised to the image given)
+            val score = if (det.categories().isNotEmpty()) det.categories()[0].score() else 0f
+            if (score < minScore) continue
+            out.add(Cand(
+                score, ox + box.left, oy + box.top, ox + box.right, oy + box.bottom,
+                ox + k[0].x() * w, oy + k[0].y() * h, ox + k[1].x() * w, oy + k[1].y() * h,
+                ox + k[3].x() * w, oy + k[3].y() * h,
+            ))
+        }
+    }
+
+    /**
+     * Whole-frame detection plus overlapping half-size tiles, so small faces in wide or group photos
+     * are not missed (the short-range detector only sees faces that fill a good part of its frame).
+     * Duplicates between passes are merged. Tiling is skipped for small images and capped in count.
+     */
+    private fun detectAll(bitmap: Bitmap): List<Cand> {
+        val all = mutableListOf<Cand>()
+        detectIn(bitmap, 0, 0, 0f, all)
+        val m = minOf(bitmap.width, bitmap.height)
+        if (m >= TILE_MIN_SIDE) {
+            val s = (m * TILE_FRACTION).toInt()
+            val step = maxOf(1, s / 2)
+            val xs = tileStarts(bitmap.width, s, step)
+            val ys = tileStarts(bitmap.height, s, step)
+            // Tile-only detections must be confident: weak ones on tiles are mostly face-like patches.
+            val tileMinScore = if (minConfidence < 0.6f) minConfidence else TILE_MIN_SCORE
+            if (xs.size * ys.size <= MAX_TILES) {
+                for (y in ys) for (x in xs) {
+                    val tile = Bitmap.createBitmap(bitmap, x, y, s, s)
+                    detectIn(tile, x, y, tileMinScore, all)
+                    tile.recycle()
+                }
+            }
+        }
+        val keep = mutableListOf<Cand>()
+        for (c in all.sortedByDescending { it.score }) {
+            if (keep.any { it.contains(c.cx(), c.cy()) || c.contains(it.cx(), it.cy()) }) continue
+            keep.add(c)
+        }
+        return keep
+    }
+
+    private fun tileStarts(total: Int, size: Int, step: Int): List<Int> {
+        val out = mutableListOf<Int>()
+        var p = 0
+        while (p + size < total) { out.add(p); p += step }
+        out.add(maxOf(0, total - size))
+        return out
+    }
+
     fun process(bitmap: Bitmap): List<Found> {
         val t0 = SystemClock.elapsedRealtime()
-        val result = detector.detect(BitmapImageBuilder(bitmap).build())
+        val cands = detectAll(bitmap)
         val detectMs = SystemClock.elapsedRealtime() - t0
         var embedMs = 0L
         val w = bitmap.width.toFloat()
         val h = bitmap.height.toFloat()
         val out = mutableListOf<Found>()
-        for (det in result.detections()) {
-            val box = det.boundingBox()
-            if (box.width() < MIN_FACE_PX || box.height() < MIN_FACE_PX) continue
-            val kps = det.keypoints()
-            if (!kps.isPresent || kps.get().size < 4) continue
-            val k = kps.get()
-            // BlazeFace order: right eye, left eye, nose tip, mouth centre (image coords, normalised)
-            val src = floatArrayOf(
-                k[0].x() * w, k[0].y() * h,
-                k[1].x() * w, k[1].y() * h,
-                k[3].x() * w, k[3].y() * h,
-            )
+        for (c in cands) {
+            if (c.right - c.left < MIN_FACE_PX || c.bottom - c.top < MIN_FACE_PX) continue
+            val src = floatArrayOf(c.rEyeX, c.rEyeY, c.lEyeX, c.lEyeY, c.mouthX, c.mouthY)
             val dst = floatArrayOf(38.29f, 51.70f, 73.53f, 51.50f, 56.14f, 92.28f)
             val m = Matrix()
             if (!m.setPolyToPoly(src, 0, dst, 0, 3)) continue
@@ -81,7 +141,7 @@ class FaceEngine(context: Context, minConfidence: Float = 0.6f) : Closeable {
             val baos = ByteArrayOutputStream()
             aligned.compress(Bitmap.CompressFormat.JPEG, 85, baos)
             aligned.recycle()
-            out.add(Found(box.left / w, box.top / h, box.right / w, box.bottom / h, emb, baos.toByteArray()))
+            out.add(Found(c.left / w, c.top / h, c.right / w, c.bottom / h, emb, baos.toByteArray()))
         }
         Log.i("FaceScan", "bitmap ${bitmap.width}x${bitmap.height} detect=${detectMs}ms faces=${out.size} embed_total=${embedMs}ms")
         return out
@@ -112,5 +172,9 @@ class FaceEngine(context: Context, minConfidence: Float = 0.6f) : Closeable {
         const val EMBEDDER_ASSET = "auraface_glintr100.tflite"
         private const val INPUT = 112
         private const val MIN_FACE_PX = 48f
+        private const val TILE_FRACTION = 0.5f
+        private const val TILE_MIN_SIDE = 400
+        private const val MAX_TILES = 24
+        private const val TILE_MIN_SCORE = 0.85f
     }
 }
