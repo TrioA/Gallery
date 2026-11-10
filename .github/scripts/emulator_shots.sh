@@ -68,7 +68,11 @@ PY
 
 shoot_theme() {
   NAME=$1
+  # Fossify swaps launcher aliases when app_icon_color changes, which closes the app once. Launch, wait, relaunch via the resolved alias.
   adb shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n $PKG/org.fossify.gallery.activities.SplashActivity.Green
+  sleep 12
+  COMP=$(adb shell cmd package resolve-activity --brief -c android.intent.category.LAUNCHER $PKG | tail -1 | tr -d '\r')
+  adb shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n "$COMP"
   sleep 10
   adb logcat -d -t 400 > shots/${NAME}_log.txt || true
   adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumed' > shots/${NAME}_top.txt || true
