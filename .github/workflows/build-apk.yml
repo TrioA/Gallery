@@ -60,6 +60,7 @@ jobs:
         runs-on: ubuntu-latest
         continue-on-error: true
         steps:
+            - uses: actions/checkout@v4
             - uses: actions/download-artifact@v4
               with:
                   name: gallery-foss-debug
@@ -69,7 +70,6 @@ jobs:
                   echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
                   sudo udevadm control --reload-rules
                   sudo udevadm trigger --name-match=kvm
-            - uses: actions/checkout@v4
             - name: Make test photos
               run: python3 .github/scripts/make_photos.py
             - name: Run on emulator and take screenshots
