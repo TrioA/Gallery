@@ -20,6 +20,8 @@ assert mf[0] > mf[1] and mf[0] > a1[0], ("multi_full must be two FULL portraits 
 print("PASS: fixtures valid", dict(mf=mf,a1=a1,a2=a2,a3=a3,a4=a4,aldrin=al,multi=m,tiny=t))
 PY
 adb install -r "$APK"
+adb shell "run-as $PKG sh -c 'mkdir -p files; touch files/dbg_disable_fullrange'"
+echo "CONTROL: legacy regression fixtures run with fallback disabled; explicit production fallback tests follow at end" >> $R
 adb shell mkdir -p /sdcard/Pictures/People
 for f in faces/armstrong_1.jpg faces/armstrong_2.jpg faces/armstrong_3.jpg faces/armstrong_4.jpg faces/aldrin_1.jpg focus/multi.jpg focus/multi_full.jpg focus/tiny.jpg focus/limit_small.jpg focus/limit_rot90.jpg; do
   adb push $f /sdcard/Pictures/People/ >/dev/null
@@ -590,4 +592,61 @@ dbsnap conflict > shots/db_conflict.txt; cat shots/db_conflict.txt >> $R
 soft "distinct contacts: nothing changed after the refusal" 20e test "$(cat shots/db_up.txt)" = "$(cat shots/db_conflict.txt)"
 adb logcat -d -s AndroidRuntime:E > shots/rt2.txt
 need "no crash in logcat during upgrade test" 21 test ! -s shots/rt2.txt
+# 25. Production full-range fallback on a previously missed small face; existing assignments unchanged.
+adb shell am force-stop $PKG; sleep 1
+adb push shots/db_devcancel/people.db /data/local/tmp/people.db >/dev/null
+adb shell "run-as $PKG sh -c 'mkdir -p databases; cp /data/local/tmp/people.db databases/people.db; rm -f databases/people.db-wal databases/people.db-shm files/dbg_disable_fullrange; echo 0 > files/dbg_stage_delay_ms'"
+adb shell cp /sdcard/Pictures/People/limit_small.jpg /sdcard/Pictures/People/fallback_small.jpg
+adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Pictures/People/fallback_small.jpg >/dev/null
+adb logcat -c
+open_people_exact
+soft "fallback test in PeopleActivity" 25top top_has PeopleActivity
+if has "Scan photos"; then tap_text "Scan photos"; fi
+sleep 3; soft "fallback scan finished" 25scan wait_scan
+shot 25a_fallback_people
+open_photo fallback_small.jpg; sheet; shot 25b_fallback_sheet
+adb shell am force-stop $PKG; sleep 1; dbsnap fallback_after > /dev/null
+python3 - shots/db_devcancel/people.db shots/db_fallback_after/people.db >> $R <<'PY'
+import sqlite3,sys
+base=sqlite3.connect(sys.argv[1]);now=sqlite3.connect(sys.argv[2])
+r=now.execute("select id,person_id,box_l,box_t,box_r,box_b,confirmed from faces where path like '%/fallback_small.jpg'").fetchall()
+print(("PASS" if len(r)==1 else "FAIL")+": fallback detects exactly one face in new small-face fixture (got %d)"%len(r))
+old=base.execute("select id,path,person_id,confirmed from faces order by id").fetchall();after={r[0]:r for r in now.execute("select id,path,person_id,confirmed from faces")}
+print(("PASS" if all(after.get(r[0])==r for r in old) else "FAIL")+": fallback preserves every earlier face assignment and confirmation")
+print("FALLBACK small face row:",r)
+PY
+adb logcat -d -s FaceScan:I > shots/fullrange_log.txt
+[ "$(grep -c full_range_fallback_start shots/fullrange_log.txt)" -gt 0 ] && pass "full-range fallback was actually exercised" || echo "FAIL: full-range fallback not seen in log" >> $R
+# repeat explicit Look again, existing box must not be duplicated
+open_photo fallback_small.jpg; sheet; tap_text "Look again (more sensitive)"; sleep 8; shot 25c_fallback_repeat
+adb shell am force-stop $PKG; sleep 1; dbsnap fallback_repeat > /dev/null
+python3 - shots/db_fallback_repeat/people.db >> $R <<'PY'
+import sqlite3,sys
+c=sqlite3.connect(sys.argv[1]);n=c.execute("select count(*) from faces where path like '%/fallback_small.jpg'").fetchone()[0]
+print(("PASS" if n==1 else "FAIL")+": repeated Look again has one face, no duplicate (%d)"%n)
+PY
+
+# Stop while the fallback is actually running. Blank photo forces a zero-candidate primary result.
+python3 - <<'PY'
+from PIL import Image
+Image.new('RGB',(1280,960),(70,70,70)).save('shots/fallback_blank.jpg')
+PY
+adb push shots/fallback_blank.jpg /sdcard/Pictures/People/fallback_blank.jpg >/dev/null
+adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Pictures/People/fallback_blank.jpg >/dev/null
+setdelay 1000; adb logcat -c
+open_people_exact
+if has "Scan photos"; then tap_text "Scan photos"; fi
+FBRUN=0
+for i in $(seq 1 30); do adb logcat -d -s FaceScan:I | grep -q full_range_fallback_start && { FBRUN=1; break; }; sleep 1; done
+[ "$FBRUN" = "1" ] && pass "Stop prerequisite: fallback start observed in log" || echo "FAIL: Stop prerequisite: fallback did not start" >> $R
+tap_text "Stop scanning"; sleep 4; shot 26a_stop_fallback
+adb shell am force-stop $PKG; sleep 1; dbsnap fallback_stopped > /dev/null
+python3 - shots/db_fallback_stopped/people.db >> $R <<'PY'
+import sqlite3,sys
+c=sqlite3.connect(sys.argv[1]);n=c.execute("select count(*) from scanned where path like '%/fallback_blank.jpg'").fetchone()[0]
+print(("PASS" if n==0 else "FAIL")+": Stop during fallback leaves interrupted blank photo unscanned (%d rows)"%n)
+PY
+adb logcat -d -s FaceScan:W > shots/fallback_stop_log.txt
+setdelay 0
+
 echo ALL DONE >> $R

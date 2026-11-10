@@ -40,6 +40,9 @@ jobs:
                     https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite
                   curl -fL --retry 3 -o app/src/main/assets/auraface_glintr100.tflite \
                     https://huggingface.co/eungsang/auraface-v1-tflite/resolve/ac623dbbf0d4e883203f76a30c365bcc967fed3a/auraface_v1_glintr100_wi8.tflite
+                  curl -fL --retry 3 -o app/src/main/assets/blaze_face_full_range.tflite \
+                    https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_full_range/float16/1/blaze_face_full_range.tflite
+                  echo "3698b18f063835bc609069ef052228fbe86d9c9a6dc8dcb7c7c2d69aed2b181b  app/src/main/assets/blaze_face_full_range.tflite" | sha256sum -c -
                   sha256sum app/src/main/assets/*.tflite
                   ls -l app/src/main/assets
 

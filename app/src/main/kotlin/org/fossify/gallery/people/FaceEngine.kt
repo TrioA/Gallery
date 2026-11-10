@@ -39,7 +39,19 @@ class FaceEngine(context: Context, private val minConfidence: Float = 0.6f) : Cl
         val embedding: FloatArray, val thumb: ByteArray,
     )
 
+    private val appContext = context.applicationContext
     private val detector: FaceDetector
+    private var fullRangeDetector: FaceDetector? = null
+    // Debug regression control only. Normal installs never have this private file.
+    private val fullRangeEnabled = !java.io.File(appContext.filesDir, "dbg_disable_fullrange").exists()
+
+    private fun fullRange(): FaceDetector = fullRangeDetector ?: FaceDetector.createFromOptions(appContext,
+        FaceDetector.FaceDetectorOptions.builder()
+            .setBaseOptions(BaseOptions.builder().setModelAssetPath(FULL_RANGE_ASSET).build())
+            .setMinDetectionConfidence(maxOf(0.6f, minConfidence))
+            .setRunningMode(RunningMode.IMAGE)
+            .build()).also { fullRangeDetector = it }
+
     private val interpreter: Interpreter
     private val embDim: Int
     private val input: ByteBuffer = ByteBuffer.allocateDirect(INPUT * INPUT * 3 * 4).order(ByteOrder.nativeOrder())
@@ -64,6 +76,7 @@ class FaceEngine(context: Context, private val minConfidence: Float = 0.6f) : Cl
     private class Cand(
         val score: Float, val left: Float, val top: Float, val right: Float, val bottom: Float,
         val rEyeX: Float, val rEyeY: Float, val lEyeX: Float, val lEyeY: Float, val mouthX: Float, val mouthY: Float,
+        val fromFullRange: Boolean = false,
     ) {
         fun cx() = (left + right) / 2
         fun cy() = (top + bottom) / 2
@@ -82,10 +95,10 @@ class FaceEngine(context: Context, private val minConfidence: Float = 0.6f) : Cl
         }
     }
 
-    private fun detectIn(src: Bitmap, ox: Int, oy: Int, minScore: Float, out: MutableList<Cand>) {
+    private fun detectIn(src: Bitmap, ox: Int, oy: Int, minScore: Float, out: MutableList<Cand>, source: FaceDetector = detector) {
         val w = src.width.toFloat()
         val h = src.height.toFloat()
-        for (det in detector.detect(BitmapImageBuilder(src).build()).detections()) {
+        for (det in source.detect(BitmapImageBuilder(src).build()).detections()) {
             val box = det.boundingBox()
             val kps = det.keypoints()
             if (!kps.isPresent || kps.get().size < 4) continue
@@ -97,6 +110,7 @@ class FaceEngine(context: Context, private val minConfidence: Float = 0.6f) : Cl
                 score, ox + box.left, oy + box.top, ox + box.right, oy + box.bottom,
                 ox + k[0].x() * w, oy + k[0].y() * h, ox + k[1].x() * w, oy + k[1].y() * h,
                 ox + k[3].x() * w, oy + k[3].y() * h,
+                source === fullRangeDetector,
             ))
         }
     }
@@ -106,10 +120,10 @@ class FaceEngine(context: Context, private val minConfidence: Float = 0.6f) : Cl
      * are not missed (the short-range detector only sees faces that fill a good part of its frame).
      * Duplicates between passes are merged. Tiling is skipped for small images and capped in count.
      */
-    private fun detectAll(bitmap: Bitmap): List<Cand> {
+    private fun detectAll(bitmap: Bitmap, source: FaceDetector = detector, allowFallback: Boolean = true): List<Cand> {
         val all = mutableListOf<Cand>()
         interrupted = false
-        detectIn(bitmap, 0, 0, 0f, all)
+        detectIn(bitmap, 0, 0, 0f, all, source)
         if (debugStageDelayMs > 0) { Thread.sleep(debugStageDelayMs); if (shouldStop()) interrupted = true }
         val m = minOf(bitmap.width, bitmap.height)
         var tiles = 0
@@ -135,7 +149,7 @@ class FaceEngine(context: Context, private val minConfidence: Float = 0.6f) : Cl
                 if (interrupted || shouldStop()) { interrupted = true; break }
                 if (debugStageDelayMs > 0) Thread.sleep(debugStageDelayMs)
                 val tile = Bitmap.createBitmap(bitmap, x, y, s, s)
-                detectIn(tile, x, y, tileMinScore, all)
+                detectIn(tile, x, y, tileMinScore, all, source)
                 tile.recycle()
                 tiles++
             }
@@ -146,6 +160,16 @@ class FaceEngine(context: Context, private val minConfidence: Float = 0.6f) : Cl
             keep.add(c)
         }
         Log.i("FaceScan", "tiles=$tiles tile_ms=${SystemClock.elapsedRealtime() - t0} raw=${all.size} kept=${keep.size}")
+        // Preserve every existing primary result and its landmarks. Only empty photos get the
+        // full-range model, so this cannot change the alignment/embeddings of faces already found.
+        // Old zero-face scan records stay intact; use Look again for those, or the existing developer reset.
+        if (keep.isEmpty() && allowFallback && fullRangeEnabled && !interrupted && !shouldStop()) {
+            val start = SystemClock.elapsedRealtime()
+            Log.i("FaceScan", "full_range_fallback_start")
+            val rescued = detectAll(bitmap, fullRange(), false)
+            Log.i("FaceScan", "full_range_fallback faces=${rescued.size} ms=${SystemClock.elapsedRealtime() - start}")
+            return rescued
+        }
         return keep
     }
 
@@ -169,7 +193,10 @@ class FaceEngine(context: Context, private val minConfidence: Float = 0.6f) : Cl
         val h = bitmap.height.toFloat()
         val out = mutableListOf<Found>()
         for (c in cands) {
-            if (c.right - c.left < MIN_FACE_PX || c.bottom - c.top < MIN_FACE_PX) continue
+            // Full-range is trained to localise smaller faces; keep the old primary gate unchanged.
+            // Small fallback faces are still guesses, not user-confirmed identities.
+            val minSize = if (c.fromFullRange) MIN_FULL_RANGE_FACE_PX else MIN_FACE_PX
+            if (c.right - c.left < minSize || c.bottom - c.top < minSize) continue
             val src = floatArrayOf(c.rEyeX, c.rEyeY, c.lEyeX, c.lEyeY, c.mouthX, c.mouthY)
             val dst = floatArrayOf(38.29f, 51.70f, 73.53f, 51.50f, 56.14f, 92.28f)
             val m = Matrix()
@@ -205,14 +232,17 @@ class FaceEngine(context: Context, private val minConfidence: Float = 0.6f) : Cl
 
     override fun close() {
         try { detector.close() } catch (_: Exception) {}
+        try { fullRangeDetector?.close() } catch (_: Exception) {}
         try { interpreter.close() } catch (_: Exception) {}
     }
 
     companion object {
+        const val FULL_RANGE_ASSET = "blaze_face_full_range.tflite"
         const val DETECTOR_ASSET = "blaze_face_short_range.tflite"
         const val EMBEDDER_ASSET = "auraface_glintr100.tflite"
         private const val INPUT = 112
         private const val MIN_FACE_PX = 48f
+        private const val MIN_FULL_RANGE_FACE_PX = 24f
         private const val TILE_FRACTION = 0.5f
         private const val BUDGET_TILE_FRACTION = 0.6f
         private const val TILE_MIN_SIDE = 400
