@@ -37,12 +37,13 @@ class PersonActivity : SimpleActivity() {
         super.onCreate(savedInstanceState)
         setContentView(binding.root)
         setupEdgeToEdge(padTopSystem = listOf(binding.personAppbar))
-        personId = intent.getLongExtra(EXTRA_PERSON_ID, -1L)
+        personId = PeopleStore.get(this).resolve(intent.getLongExtra(EXTRA_PERSON_ID, -1L))
         binding.personGrid.layoutManager = GridLayoutManager(this, 3)
         binding.personGrid.adapter = Adapter()
         binding.personRename.setOnClickListener { askName() }
         binding.personContact.setOnClickListener {
             try {
+                android.util.Log.w("PersonLink", "launching picker t=${android.os.SystemClock.elapsedRealtime()}")
                 startActivityForResult(Intent(Intent.ACTION_PICK, ContactsContract.Contacts.CONTENT_URI), REQ_CONTACT)
             } catch (e: Exception) {
                 binding.personInfo.text = "No contacts app available."
@@ -64,6 +65,8 @@ class PersonActivity : SimpleActivity() {
 
     private fun load() {
         val store = PeopleStore.get(this)
+        personId = store.resolve(personId)
+        intent.putExtra(EXTRA_PERSON_ID, personId)
         val p = store.getPerson(personId)
         if (p == null || p.faceCount == 0) {
             finish()
@@ -71,7 +74,8 @@ class PersonActivity : SimpleActivity() {
         }
         binding.personToolbar.title = p.displayName()
         binding.personInfo.text = "${p.faceCount} faces" +
-            (if (p.contactName.isNotBlank()) ", linked to contact ${p.contactName}" else "")
+            (if (p.contactName.isNotBlank()) ", linked to contact ${p.contactName}" else "") +
+            (if (p.aliases.isNotBlank()) ". Also named: ${p.aliases.replace("|", ", ")}" else "")
         // Photos we cannot open right now (permission, storage) are hidden, not forgotten.
         paths = store.pathsOfPerson(personId).filter { File(it).exists() }
         binding.personGrid.adapter?.notifyDataSetChanged()
@@ -95,7 +99,7 @@ class PersonActivity : SimpleActivity() {
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        android.util.Log.w("PersonLink", "result req=$requestCode code=$resultCode personId=$personId")
+        android.util.Log.w("PersonLink", "result t=${android.os.SystemClock.elapsedRealtime()} req=$requestCode code=$resultCode personId=$personId")
         if (requestCode == REQ_CONTACT && resultCode == RESULT_OK) {
             val uri = data?.data ?: return
             try {
@@ -104,7 +108,7 @@ class PersonActivity : SimpleActivity() {
                 )?.use {
                     android.util.Log.w("PersonLink", "rows=${it.count}")
                     if (it.moveToFirst()) {
-                        PeopleStore.get(this).setContact(personId, it.getString(0) ?: "", it.getString(1) ?: "")
+                        personId = PeopleStore.get(this).setContact(personId, it.getString(0) ?: "", it.getString(1) ?: "")
                     }
                 }
             } catch (e: Exception) {

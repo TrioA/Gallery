@@ -13,6 +13,7 @@ data class Person(
     val contactKey: String,
     val contactName: String,
     val faceCount: Int,
+    val aliases: String = "",
 ) {
     fun displayName(): String = when {
         name.isNotBlank() -> name
@@ -22,13 +23,14 @@ data class Person(
 }
 
 class PeopleStore private constructor(context: Context) :
-    SQLiteOpenHelper(context.applicationContext, "people.db", null, 1) {
+    SQLiteOpenHelper(context.applicationContext, "people.db", null, 2) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             "CREATE TABLE people (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL DEFAULT ''," +
                 " contact_key TEXT NOT NULL DEFAULT '', contact_name TEXT NOT NULL DEFAULT ''," +
-                " centroid BLOB, face_count INTEGER NOT NULL DEFAULT 0)"
+                " centroid BLOB, face_count INTEGER NOT NULL DEFAULT 0, aliases TEXT NOT NULL DEFAULT ''," +
+                " merged_into INTEGER NOT NULL DEFAULT 0)"
         )
         db.execSQL(
             "CREATE TABLE faces (id INTEGER PRIMARY KEY AUTOINCREMENT, path TEXT NOT NULL," +
@@ -40,7 +42,13 @@ class PeopleStore private constructor(context: Context) :
         db.execSQL("CREATE TABLE scanned (path TEXT PRIMARY KEY, mtime INTEGER NOT NULL, faces INTEGER NOT NULL)")
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {}
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        // Additive only: existing people, faces and corrections are untouched.
+        if (oldVersion < 2) {
+            db.execSQL("ALTER TABLE people ADD COLUMN aliases TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE people ADD COLUMN merged_into INTEGER NOT NULL DEFAULT 0")
+        }
+    }
 
     // ---- scanning state ----
     fun isScanned(path: String, mtime: Long): Boolean {
@@ -103,30 +111,54 @@ class PeopleStore private constructor(context: Context) :
         writableDatabase.update("people", v, "id=?", arrayOf(id.toString()))
     }
 
-    fun addFace(path: String, l: Float, t: Float, r: Float, b: Float, emb: FloatArray, personId: Long, thumb: ByteArray) {
-        val v = ContentValues().apply {
-            put("path", path); put("box_l", l); put("box_t", t); put("box_r", r); put("box_b", b)
-            put("emb", floatsToBytes(emb)); put("person_id", personId); put("thumb", thumb)
+    /** Follow merge redirects so a scanner holding an old group id never writes into a merged-away group. */
+    fun resolve(id: Long): Long {
+        var cur = id
+        for (i in 0 until 20) {
+            var next = 0L
+            readableDatabase.rawQuery("SELECT merged_into FROM people WHERE id=?", arrayOf(cur.toString())).use {
+                if (it.moveToFirst()) next = it.getLong(0)
+            }
+            if (next <= 0L) return cur
+            cur = next
         }
-        writableDatabase.insert("faces", null, v)
+        return cur
+    }
+
+    /** Returns the person id the face was really stored under (differs from [personId] if that group was merged meanwhile). */
+    fun addFace(path: String, l: Float, t: Float, r: Float, b: Float, emb: FloatArray, personId: Long, thumb: ByteArray): Long {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val target = resolve(personId)
+            val v = ContentValues().apply {
+                put("path", path); put("box_l", l); put("box_t", t); put("box_r", r); put("box_b", b)
+                put("emb", floatsToBytes(emb)); put("person_id", target); put("thumb", thumb)
+            }
+            db.insert("faces", null, v)
+            db.setTransactionSuccessful()
+            return target
+        } finally {
+            db.endTransaction()
+        }
     }
 
     fun listPeople(): List<Person> {
         val out = mutableListOf<Person>()
         readableDatabase.rawQuery(
-            "SELECT id, name, contact_key, contact_name, face_count FROM people WHERE face_count > 0 ORDER BY face_count DESC",
+            "SELECT id, name, contact_key, contact_name, face_count, aliases FROM people WHERE face_count > 0 ORDER BY face_count DESC",
             null
         ).use {
-            while (it.moveToNext()) out.add(Person(it.getLong(0), it.getString(1), it.getString(2), it.getString(3), it.getInt(4)))
+            while (it.moveToNext()) out.add(Person(it.getLong(0), it.getString(1), it.getString(2), it.getString(3), it.getInt(4), it.getString(5)))
         }
         return out
     }
 
     fun getPerson(id: Long): Person? {
         readableDatabase.rawQuery(
-            "SELECT id, name, contact_key, contact_name, face_count FROM people WHERE id=?", arrayOf(id.toString())
+            "SELECT id, name, contact_key, contact_name, face_count, aliases FROM people WHERE id=?", arrayOf(id.toString())
         ).use {
-            return if (it.moveToFirst()) Person(it.getLong(0), it.getString(1), it.getString(2), it.getString(3), it.getInt(4)) else null
+            return if (it.moveToFirst()) Person(it.getLong(0), it.getString(1), it.getString(2), it.getString(3), it.getInt(4), it.getString(5)) else null
         }
     }
 
@@ -144,29 +176,74 @@ class PeopleStore private constructor(context: Context) :
         return out
     }
 
-    /** Name a person. If another person already has this exact name, the two are merged. */
+    /** Name a person. Equal names do NOT merge groups: several groups may share a name. */
     fun setName(personId: Long, name: String): Long {
-        val trimmed = name.trim()
-        if (trimmed.isNotEmpty()) {
-            readableDatabase.rawQuery(
-                "SELECT id FROM people WHERE id<>? AND name=? COLLATE NOCASE AND face_count>0 LIMIT 1",
-                arrayOf(personId.toString(), trimmed)
-            ).use {
-                if (it.moveToFirst()) {
-                    val other = it.getLong(0)
-                    mergePeople(personId, other)
-                    return other
-                }
-            }
-        }
-        val v = ContentValues().apply { put("name", trimmed) }
+        val v = ContentValues().apply { put("name", name.trim()) }
         writableDatabase.update("people", v, "id=?", arrayOf(personId.toString()))
         return personId
     }
 
-    fun setContact(personId: Long, lookupKey: String, displayName: String) {
+    /**
+     * Link a phone contact. One contact owns at most one group: if another group already has this
+     * contact, the two are merged (faces, confirmations and names are kept). Returns the surviving person id.
+     */
+    fun setContact(personId: Long, lookupKey: String, displayName: String): Long {
         val v = ContentValues().apply { put("contact_key", lookupKey); put("contact_name", displayName) }
         writableDatabase.update("people", v, "id=?", arrayOf(personId.toString()))
+        if (lookupKey.isBlank()) return personId
+        readableDatabase.rawQuery(
+            "SELECT id FROM people WHERE id<>? AND contact_key=? AND face_count>0 ORDER BY face_count DESC LIMIT 1",
+            arrayOf(personId.toString(), lookupKey)
+        ).use {
+            if (it.moveToFirst()) {
+                val other = it.getLong(0)
+                return if (mergePeople(personId, other)) other else personId
+            }
+        }
+        return personId
+    }
+
+    /**
+     * Merge several groups into one: all faces move to the survivor and are marked confirmed (the user
+     * said they are the same person). Refuses (returns -1) when the groups are linked to different contacts.
+     */
+    fun mergeMany(ids: List<Long>): Long {
+        val people = ids.distinct().mapNotNull { getPerson(it) }.filter { it.faceCount > 0 }
+        if (people.size < 2) return people.firstOrNull()?.id ?: -1L
+        if (people.map { it.contactKey }.filter { it.isNotBlank() }.distinct().size > 1) return -1L
+        val target = people.firstOrNull { it.contactKey.isNotBlank() } ?: people.maxByOrNull { it.faceCount }!!
+        for (p in people) if (p.id != target.id) mergePeople(p.id, target.id)
+        return target.id
+    }
+
+    class MergePlan(val survivor: Person?, val others: List<Person>, val aliasNames: List<String>, val conflictingContacts: List<String>)
+
+    /** What merging these groups would do, for the review dialog. */
+    fun mergePlan(ids: List<Long>): MergePlan {
+        val people = ids.distinct().mapNotNull { getPerson(it) }.filter { it.faceCount > 0 }
+        val contacts = people.filter { it.contactKey.isNotBlank() }.distinctBy { it.contactKey }.map { it.contactName.ifBlank { "a contact" } }
+        val target = people.firstOrNull { it.contactKey.isNotBlank() } ?: people.maxByOrNull { it.faceCount }
+        val others = people.filter { it.id != target?.id }
+        val aliasNames = others.map { it.name }.filter { it.isNotBlank() && !it.equals(target?.name, true) }
+        return MergePlan(target, others, aliasNames, if (contacts.size > 1) contacts else emptyList())
+    }
+
+    /** Groups that already share a contact (from older versions): merge each set into one. Returns how many merges happened. */
+    fun consolidateContacts(): Int {
+        val groups = HashMap<String, MutableList<Long>>()
+        readableDatabase.rawQuery("SELECT contact_key, id FROM people WHERE contact_key<>'' AND face_count>0", null).use {
+            while (it.moveToNext()) groups.getOrPut(it.getString(0)) { mutableListOf() }.add(it.getLong(1))
+        }
+        var merged = 0
+        for ((_, ids) in groups) if (ids.size > 1) { mergeMany(ids); merged += ids.size - 1 }
+        return merged
+    }
+
+    /** Groups whose average face is close to this one: only a suggestion for the user to review. */
+    fun similarTo(id: Long, threshold: Float): List<Long> {
+        val all = loadCentroids()
+        val me = all.firstOrNull { it.id == id } ?: return emptyList()
+        return all.filter { it.id != id && FaceMath.dot(it.vec, me.vec) >= threshold }.map { it.id }
     }
 
     /** Embeddings of faces in this photo that the user confirmed or corrected. */
@@ -193,22 +270,43 @@ class PeopleStore private constructor(context: Context) :
         return true
     }
 
-    /** Move all faces of [from] into [into]; centroid becomes the weighted mean. */
-    fun mergePeople(from: Long, into: Long) {
-        if (from == into) return
+    /**
+     * Move all faces of [from] into [into] (marked confirmed); the centroid becomes the weighted mean.
+     * [into] keeps its own name and contact; if it has none it takes [from]'s. Returns false if the two
+     * are linked to different contacts (nothing changes).
+     */
+    fun mergePeople(from: Long, into: Long): Boolean {
+        if (from == into) return true
+        val pf = getPerson(from) ?: return false
+        val pi = getPerson(into) ?: return false
+        if (pf.contactKey.isNotBlank() && pi.contactKey.isNotBlank() && pf.contactKey != pi.contactKey) return false
         val db = writableDatabase
         db.beginTransaction()
         try {
             val a = loadCentroidOf(from)
             val b = loadCentroidOf(into)
-            db.execSQL("UPDATE faces SET person_id=? WHERE person_id=?", arrayOf<Any>(into, from))
+            db.execSQL("UPDATE faces SET person_id=?, confirmed=1 WHERE person_id=?", arrayOf<Any>(into, from))
             if (a != null && b != null && a.vec.size == b.vec.size) {
                 val sum = FloatArray(a.vec.size) { a.vec[it] * a.count + b.vec[it] * b.count }
                 updateCentroid(into, FaceMath.normalized(sum), a.count + b.count)
+            } else {
+                recomputeCentroid(into)
             }
-            val v = ContentValues().apply { put("face_count", 0) }
+            val keep = ContentValues().apply {
+                if (pi.name.isBlank() && pf.name.isNotBlank()) put("name", pf.name)
+                // Names are never dropped: a different name on the merged group becomes an alias of the survivor.
+                val names = (listOf(pi.aliases, pf.aliases).flatMap { it.split("|") } +
+                    (if (pi.name.isNotBlank() && pf.name.isNotBlank() && !pi.name.equals(pf.name, true)) listOf(pf.name) else emptyList()))
+                    .map { it.trim() }.filter { it.isNotEmpty() && !it.equals(if (pi.name.isNotBlank()) pi.name else pf.name, true) }
+                    .distinctBy { it.lowercase() }
+                put("aliases", names.joinToString("|"))
+                if (pi.contactKey.isBlank() && pf.contactKey.isNotBlank()) { put("contact_key", pf.contactKey); put("contact_name", pf.contactName) }
+            }
+            if (keep.size() > 0) db.update("people", keep, "id=?", arrayOf(into.toString()))
+            val v = ContentValues().apply { put("face_count", 0); put("contact_key", ""); put("contact_name", ""); put("name", ""); put("aliases", ""); put("merged_into", into) }
             db.update("people", v, "id=?", arrayOf(from.toString()))
             db.setTransactionSuccessful()
+            return true
         } finally {
             db.endTransaction()
         }
@@ -267,7 +365,7 @@ class PeopleStore private constructor(context: Context) :
             if (it.moveToFirst()) { fromId = it.getLong(0); emb = bytesToFloats(it.getBlob(1)) }
         }
         val e = emb ?: return toPersonId
-        val target = if (toPersonId == 0L) createPerson(e) else toPersonId
+        val target = if (toPersonId == 0L) createPerson(e) else resolve(toPersonId)
         val v = ContentValues().apply { put("person_id", target); put("confirmed", 1) }
         writableDatabase.update("faces", v, "id=?", arrayOf(faceId.toString()))
         recomputeCentroid(target)

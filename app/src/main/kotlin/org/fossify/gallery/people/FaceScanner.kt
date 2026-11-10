@@ -241,8 +241,15 @@ object FaceScanner {
             target = PeopleStore.Centroid(id, f.embedding.copyOf(), 1, mutableListOf(f.embedding))
             centroids.add(target)
         }
-        store.addFace(path, f.left, f.top, f.right, f.bottom, f.embedding, target.id, f.thumb)
-        store.updateCentroid(target.id, target.vec, target.count)
+        val stored = store.addFace(path, f.left, f.top, f.right, f.bottom, f.embedding, target.id, f.thumb)
+        if (stored != target.id) {
+            // The user merged this group while the scan was running: use the database as truth and reload.
+            store.recomputeCentroid(stored)
+            centroids.clear()
+            centroids.addAll(store.loadCentroids())
+        } else {
+            store.updateCentroid(target.id, target.vec, target.count)
+        }
     }
 
     private fun decode(context: Context, id: Long): Bitmap? {

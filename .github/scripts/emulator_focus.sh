@@ -125,7 +125,7 @@ adb shell content insert --uri content://com.android.contacts/data --bind raw_co
 adb shell content query --uri content://com.android.contacts/contacts --projection display_name > shots/contacts_list.txt
 open_people; adb shell input tap 160 650; sleep 4
 need "person page open" 09 has "Link contact"
-tap_text "Link contact"; sleep 4; shot 09_picker
+tap_text "Link contact"; sleep 1; adb logcat -d -s PersonLink:W > shots/personlink_launch.txt; sleep 3; shot 09_picker
 soft "contact picker opened" 09b top_has contacts
 soft "synthetic contact present in picker" 09c has "Test_Person"
 tap_text Test_Person; sleep 4; shot 10_linked; adb logcat -d -s PersonLink:W > shots/personlink.txt
@@ -155,14 +155,131 @@ need "revoked: stored faces/people/confirmed/contacts/scanned counts unchanged" 
 adb shell pm grant $PKG android.permission.READ_MEDIA_IMAGES
 adb shell appops set --uid $PKG MANAGE_EXTERNAL_STORAGE allow
 open_people; sleep 5; shot 12_restored_people
-need "restored: People screen shows same people and faces" 12 has "2 people, 9 faces"
+need "restored: People screen shows same people and faces" 12 has "2 people, 10 faces"
 adb shell input tap 160 650; sleep 4
 soft "restored: contact link still there" 12b has "linked to contact Test_Person"
 echo "NOTE: scanner behaviour with revoked access is not reachable from the UI (People needs the app open); checked by launch + DB counts only" >> $R
+
+facehash() { python3 - shots/db_$1/people.db <<'PY'
+import sqlite3,sys,hashlib
+c=sqlite3.connect(sys.argv[1])
+rows=c.execute("select id,path,box_l,box_t from faces order by id").fetchall()
+print(len(rows),hashlib.md5(repr(rows).encode()).hexdigest())
+PY
+}
+orphans() { python3 - shots/db_$1/people.db <<'PY'
+import sqlite3,sys
+c=sqlite3.connect(sys.argv[1])
+print(c.execute("select count(*) from faces f left join people p on p.id=f.person_id where p.id is null or p.face_count=0").fetchone()[0])
+PY
+}
+# 6b. bulk merge: long-press one group, tap another, merge; every face kept, all marked confirmed
+open_people; adb shell am force-stop $PKG; open_people
+adb shell input swipe 160 650 160 650 900; sleep 2; shot 12m_selected
+soft "merge: selection bar shows after long-press" 12m has "Merge 1 into one"
+adb shell input tap 540 650; sleep 2; shot 12n_two_selected
+soft "merge: two groups selected" 12n has "Merge 2 into one"
+tap_text "Merge 2 into one"; sleep 2; shot 12o_confirm
+tap_text Merge; sleep 3; shot 12p_merged
+soft "merge: one person left, all faces kept" 12p has "1 people, 10 faces"
+adb shell am force-stop $PKG; sleep 2
+dbsnap after_merge > shots/db_merge.txt; cat shots/db_merge.txt >> $R
+soft "merge: same face ids, photos and boxes before and after (hash)" 12r test "$(facehash before_revoke)" = "$(facehash after_merge)"
+soft "merge: no face points at an empty or missing group" 12s test "$(orphans after_merge)" = "0"
+open_people; shot 12t_after_restart
+soft "merge: still 1 person, 10 faces after restart" 12t has "1 people, 10 faces"
+tap_text "Scan photos"; sleep 12; shot 12u_rescan
+soft "merge: rescan keeps 1 person, 10 faces" 12u has "1 people, 10 faces"
+adb shell am force-stop $PKG; sleep 2
+dbsnap after_rescan > shots/db_rescan.txt; cat shots/db_rescan.txt >> $R
+soft "merge: all faces still confirmed after rescan" 12v test "$(cut -d' ' -f1-3 shots/db_rescan.txt)" = "10 1 10"
+soft "merge: DB shows 1 person, 10 faces, all confirmed" 12q test "$(cut -d' ' -f1-3 shots/db_merge.txt)" = "10 1 10"
 
 # 7. originals untouched
 adb shell 'md5sum /sdcard/Pictures/People/*.jpg' > shots/md5_after.txt
 need "originals byte-identical after all of the above" 13 diff -q shots/md5_before.txt shots/md5_after.txt
 adb logcat -d -s AndroidRuntime:E > shots/rt.txt
 need "no crash in logcat" 14 test ! -s shots/rt.txt
+
+# 8. upgrade from a populated v1 database (the schema the delivered 1015/1022 builds use)
+adb shell am force-stop $PKG
+adb shell 'rm -f /sdcard/Pictures/People/*.jpg'
+adb shell content delete --uri content://media/external/images/media --where "_data like '%/Pictures/People/%'" >/dev/null 2>&1
+python3 - <<'PY'
+import sqlite3,os,struct,random
+random.seed(7)
+os.makedirs('shots',exist_ok=True)
+f='shots/v1_fixture.db'
+if os.path.exists(f): os.remove(f)
+c=sqlite3.connect(f)
+c.executescript("""
+CREATE TABLE people (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL DEFAULT '', contact_key TEXT NOT NULL DEFAULT '', contact_name TEXT NOT NULL DEFAULT '', centroid BLOB, face_count INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE faces (id INTEGER PRIMARY KEY AUTOINCREMENT, path TEXT NOT NULL, box_l REAL, box_t REAL, box_r REAL, box_b REAL, emb BLOB NOT NULL, person_id INTEGER NOT NULL, confirmed INTEGER NOT NULL DEFAULT 0, thumb BLOB);
+CREATE INDEX faces_person ON faces(person_id);
+CREATE INDEX faces_path ON faces(path);
+CREATE TABLE scanned (path TEXT PRIMARY KEY, mtime INTEGER NOT NULL, faces INTEGER NOT NULL);
+""")
+def vec(seed):
+    r=random.Random(seed); v=[r.gauss(0,1) for _ in range(512)]; n=sum(x*x for x in v)**.5
+    return struct.pack('<512f',*[x/n for x in v])
+# id, name, contact_key, contact_name, faces: (confirmed list)
+people=[(1,'Sam','','',[1,1,0]),(2,'Sam','','',[1,0]),(3,'Alex','K1','Alex',[1,0]),(4,'Al','K1','Al',[0,1]),(5,'','K2','Bo',[1]),(6,'','K3','Cy',[0]),(7,'','','',[0])]
+fid=0
+for pid,name,ck,cn,conf in people:
+    c.execute("insert into people(id,name,contact_key,contact_name,centroid,face_count) values(?,?,?,?,?,?)",(pid,name,ck,cn,vec(pid),len(conf)))
+    for i,cf in enumerate(conf):
+        fid+=1
+        c.execute("insert into faces(id,path,box_l,box_t,box_r,box_b,emb,person_id,confirmed) values(?,?,?,?,?,?,?,?,?)",(fid,f'/sdcard/Pictures/Old/p{pid}_{i}.jpg',.1,.1,.4,.4,vec(pid*100+i),pid,cf))
+        c.execute("insert into scanned values(?,?,1)",(f'/sdcard/Pictures/Old/p{pid}_{i}.jpg',1000+fid))
+c.execute("PRAGMA user_version=1"); c.commit()
+print(c.execute("select count(*) from faces").fetchone())
+PY
+cp shots/v1_fixture.db shots/v1_fixture_untouched_copy.db
+adb push shots/v1_fixture.db /data/local/tmp/people.db >/dev/null
+adb shell "run-as $PKG sh -c 'mkdir -p databases; cp /data/local/tmp/people.db databases/people.db; rm -f databases/people.db-wal databases/people.db-shm'"
+dbsnap v1fixture > shots/db_v1.txt; cat shots/db_v1.txt >> $R
+need "upgrade test: v1 fixture installed in app (12 faces, 7 people)" 20 test "$(cut -d' ' -f1-2 shots/db_v1.txt)" = "12 7"
+open_people; sleep 3; shot 20_upgraded_people
+adb shell am force-stop $PKG; sleep 2
+dbsnap upgraded > shots/db_up.txt; cat shots/db_up.txt >> $R
+python3 - shots/db_upgraded/people.db shots/v1_fixture.db >> $R <<'PY'
+import sqlite3,sys
+n=sqlite3.connect(sys.argv[1]); o=sqlite3.connect(sys.argv[2])
+chk=lambda d,m: print(("PASS: " if d else "FAIL: ")+m)
+chk(n.execute("pragma user_version").fetchone()[0]==2,"upgrade: schema version is 2")
+cols=[r[1] for r in n.execute("pragma table_info(people)")]
+chk('aliases' in cols and 'merged_into' in cols,"upgrade: new columns present")
+of={r[0]:(r[1],r[2]) for r in o.execute("select id,path,person_id from faces")}
+nf={r[0]:(r[1],r[2],r[3]) for r in n.execute("select id,path,person_id,confirmed from faces")}
+chk(set(of)==set(nf) and all(of[i][0]==nf[i][0] for i in of),"upgrade: every original face id and photo path survived")
+oc={r[0] for r in o.execute("select id from faces where confirmed=1")}
+chk(all(nf[i][2]==1 for i in oc),"upgrade: faces the user confirmed are still confirmed")
+chk(n.execute("select count(*) from scanned").fetchone()[0]==o.execute("select count(*) from scanned").fetchone()[0],"upgrade: scan records survived")
+sam=n.execute("select id,face_count from people where name='Sam' and face_count>0 order by id").fetchall()
+chk(len(sam)==2,"equal names stay separate: two groups named Sam remain (faces %s)"%[x[1] for x in sam])
+k1=n.execute("select id,name,aliases,face_count from people where contact_key='K1' and face_count>0").fetchall()
+chk(len(k1)==1 and k1[0][3]==4,"same contact K1: consolidated to one group with all 4 faces: %s"%(k1,))
+chk(len(k1)==1 and ('Al' in (k1[0][1]+'|'+k1[0][2]).split('|')) and ('Alex' in (k1[0][1]+'|'+k1[0][2]).split('|')),"same contact K1: both names kept (name or alias)")
+chk(n.execute("select count(*) from people where contact_key in ('K2','K3') and face_count>0").fetchone()[0]==2,"distinct contacts K2 and K3 stay separate")
+chk(n.execute("select count(*) from faces f left join people p on p.id=f.person_id where p.id is null or p.face_count=0").fetchone()[0]==0,"no orphan faces after upgrade and consolidation")
+chk(n.execute("select count(*) from people where face_count>0").fetchone()[0]==6,"6 groups remain (7 minus one duplicate-contact merge)")
+PY
+open_people; sleep 3; shot 20c_people_after_restart
+soft "upgrade: still 6 people, 12 faces after restart" 20c has "6 people, 12 faces"
+press_text() { dump; XY=$(python3 - "$1" <<'PY'
+import sys,re,xml.etree.ElementTree as ET
+for n in ET.parse('/tmp/ui.xml').iter('node'):
+    if (n.get('text') or '')==sys.argv[1]:
+        m=re.findall(r'\d+',n.get('bounds'));x1,y1,x2,y2=map(int,m);print((x1+x2)//2,(y1+y2)//2);break
+PY
+); [ -n "$XY" ] && adb shell input swipe $XY $XY 900; }
+press_text "Bo"; sleep 2
+tap_text "Cy"; sleep 2; tap_text "Merge 2 into one"; sleep 2; shot 20d_conflict
+soft "distinct contacts: merge refused with an explanation" 20d has "different contacts"
+tap_text OK; sleep 2
+adb shell am force-stop $PKG; sleep 2
+dbsnap conflict > shots/db_conflict.txt; cat shots/db_conflict.txt >> $R
+soft "distinct contacts: nothing changed after the refusal" 20e test "$(cat shots/db_up.txt)" = "$(cat shots/db_conflict.txt)"
+adb logcat -d -s AndroidRuntime:E > shots/rt2.txt
+need "no crash in logcat during upgrade test" 21 test ! -s shots/rt2.txt
 echo ALL DONE >> $R

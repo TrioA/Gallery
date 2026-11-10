@@ -47,6 +47,41 @@
             android:paddingBottom="@dimen/medium_margin"
             android:text="@string/people_scan" />
 
+        <LinearLayout
+            android:id="@+id/people_select_bar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:padding="@dimen/medium_margin"
+            android:visibility="gone">
+
+            <org.fossify.commons.views.MyTextView
+                android:id="@+id/people_merge"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:padding="@dimen/medium_margin" />
+
+            <org.fossify.commons.views.MyTextView
+                android:id="@+id/people_similar"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:padding="@dimen/medium_margin"
+                android:text="Suggest similar" />
+
+            <org.fossify.commons.views.MyTextView
+                android:id="@+id/people_cancel_select"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:padding="@dimen/medium_margin"
+                android:text="Cancel" />
+        </LinearLayout>
+
         <org.fossify.commons.views.MyTextView
             android:id="@+id/people_placeholder"
             android:layout_width="match_parent"
