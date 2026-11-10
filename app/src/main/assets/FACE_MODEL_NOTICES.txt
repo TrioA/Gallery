@@ -1,0 +1,7 @@
+MediaPipe BlazeFace full-range face detector
+Publisher: Google / MediaPipe. Licensed under Apache License, Version 2.0.
+A copy of that license is included as MEDIAPIPE_APACHE_LICENSE.txt.
+Official model card: https://storage.googleapis.com/mediapipe-assets/MediaPipe%20BlazeFace%20Model%20Card%20(Full%20Range).pdf
+Fixed version: https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_full_range/float16/1/blaze_face_full_range.tflite
+SHA-256: 3698b18f063835bc609069ef052228fbe86d9c9a6dc8dcb7c7c2d69aed2b181b
+Used only to locate faces. It does not identify people or retrain the identity model.
