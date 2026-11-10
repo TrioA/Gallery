@@ -134,9 +134,12 @@ shoot_theme() {
   tap_text "Scan photos"; sleep 40; adb exec-out screencap -p > shots/${NAME}_18_resumed_done.png
   # contact picker check with a synthetic contact in this disposable emulator
   adb shell content insert --uri content://com.android.contacts/raw_contacts --bind account_type:n: --bind account_name:n: >/dev/null 2>&1 || true
+  adb shell content insert --uri content://com.android.contacts/data --bind raw_contact_id:i:1 --bind mimetype:s:vnd.android.cursor.item/name --bind data1:s:Test_Person >/dev/null 2>&1 || true
   tap_text "Buzz"; sleep 4; adb exec-out screencap -p > shots/${NAME}_18b_buzz_page.png
   tap_text "Link contact"; sleep 4; adb exec-out screencap -p > shots/${NAME}_19_contact_picker.png
   adb shell dumpsys activity activities | grep -E 'topResumedActivity' > shots/${NAME}_top_contact.txt || true
+  tap_text Test_Person; sleep 4; adb exec-out screencap -p > shots/${NAME}_19b_contact_linked.png
+  adb shell input keyevent KEYCODE_HOME; sleep 1; adb shell am force-stop com.android.contacts
   # photo permission revoked then restored: people records must survive untouched
   adb shell am force-stop $PKG
   adb shell pm revoke $PKG android.permission.READ_MEDIA_IMAGES
