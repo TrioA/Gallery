@@ -111,6 +111,27 @@ shoot_theme() {
   adb shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n $PKG/org.fossify.gallery.activities.SplashActivity.Green >/dev/null; sleep 6
   tap_text People; sleep 4; adb exec-out screencap -p > shots/${NAME}_13_people_after_restart.png
   tap_text "Scan photos"; sleep 8; adb exec-out screencap -p > shots/${NAME}_14_rescan_nothing_new.png
+  # Stop/resume test: add 24 new copies of face photos, start scan, stop quickly, check it stays stopped, then resume
+  for i in $(seq 1 24); do
+    src=$(ls faces/*.jpg | sed -n "$(( (i % $(ls faces/*.jpg | wc -l)) + 1 ))p")
+    adb push $src /sdcard/Pictures/People/extra_$i.jpg >/dev/null
+    adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "file:///sdcard/Pictures/People/extra_$i.jpg" >/dev/null
+  done
+  sleep 3
+  adb shell am force-stop $PKG; sleep 1
+  adb shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n $PKG/org.fossify.gallery.activities.SplashActivity.Green >/dev/null; sleep 6
+  tap_text People; sleep 3
+  tap_text "Scan photos"; sleep 4; adb exec-out screencap -p > shots/${NAME}_15_scanning.png
+  tap_text "Stop scanning"; sleep 3; adb exec-out screencap -p > shots/${NAME}_16_stopped.png
+  adb logcat -d -s FaceScan:I | wc -l > shots/${NAME}_stop_count1.txt; sleep 10
+  adb logcat -d -s FaceScan:I | wc -l > shots/${NAME}_stop_count2.txt
+  adb exec-out screencap -p > shots/${NAME}_17_still_stopped.png
+  tap_text "Scan photos"; sleep 40; adb exec-out screencap -p > shots/${NAME}_18_resumed_done.png
+  # contact picker check with a synthetic contact in this disposable emulator
+  adb shell content insert --uri content://com.android.contacts/raw_contacts --bind account_type:n: --bind account_name:n: >/dev/null 2>&1 || true
+  tap_text "Person 1"; sleep 4
+  tap_text "Link contact"; sleep 4; adb exec-out screencap -p > shots/${NAME}_19_contact_picker.png
+  adb shell dumpsys activity activities | grep -E 'topResumedActivity' > shots/${NAME}_top_contact.txt || true
   adb logcat -d -s FaceScan:I > shots/${NAME}_facescan.txt || true
   adb logcat -d -s AndroidRuntime:E > shots/${NAME}_rt.txt || true
   adb logcat -d -b crash > shots/${NAME}_crash.txt || true
