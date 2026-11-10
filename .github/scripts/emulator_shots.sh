@@ -101,7 +101,7 @@ shoot_theme() {
   tap_text "Scan photos"; sleep 45; adb exec-out screencap -p > shots/${NAME}_11_people_scan.png
   tap_text "Person 1"; sleep 5; adb exec-out screencap -p > shots/${NAME}_12_person.png
   tap_text Name; sleep 2; adb exec-out screencap -p > shots/${NAME}_12b_name_dialog.png
-  adb shell input text Buzz; sleep 1; adb shell input keyevent KEYCODE_ENTER; sleep 1; tap_text OK; sleep 3
+  adb shell input text Buzz; sleep 1; adb shell input keyevent KEYCODE_ENTER; sleep 1; adb shell uiautomator dump /sdcard/ui.xml >/dev/null; adb pull /sdcard/ui.xml /tmp/ui.xml >/dev/null; tap_raw OK; sleep 3
   adb exec-out screencap -p > shots/${NAME}_12c_named.png
   adb shell input tap 200 600; sleep 6; adb exec-out screencap -p > shots/${NAME}_12d_person_photo.png
   adb shell input swipe 540 1700 540 600 150; sleep 4; adb exec-out screencap -p > shots/${NAME}_12e_sheet_person.png
