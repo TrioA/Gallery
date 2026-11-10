@@ -16,10 +16,13 @@ done
 adb shell appops set --uid $PKG MANAGE_EXTERNAL_STORAGE allow
 adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1
 sleep 8; adb exec-out screencap -p > shots/1_launch.png
+adb logcat -d -b crash > shots/crash_early.txt || true
 SIZE=$(adb shell wm size | grep -o '[0-9]*x[0-9]*' | tail -1)
 W=${SIZE%x*}; H=${SIZE#*x}
 Y=$((H-200))
 adb shell input tap $((W/2)) $Y; sleep 4; adb exec-out screencap -p > shots/2_people.png
 adb shell input tap $((W*5/6)) $Y; sleep 4; adb exec-out screencap -p > shots/3_albums.png
 adb shell input tap $((W/6)) $Y; sleep 4; adb exec-out screencap -p > shots/4_pictures.png
+adb logcat -d -b crash > shots/crash.txt || true
+adb logcat -d -s AndroidRuntime:E > shots/runtime.txt || true
 adb shell uiautomator dump /sdcard/ui.xml; adb pull /sdcard/ui.xml shots/ui.xml || true
