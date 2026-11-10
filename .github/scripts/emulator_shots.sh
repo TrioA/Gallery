@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 set -x
 mkdir -p shots
-APK=$(ls apk/*debug.apk | head -1)
+APK=$(ls apk/*x86_64*debug.apk | head -1)
 PKG=org.fossify.gallery.debug
 adb install -r "$APK"
 adb shell mkdir -p /sdcard/DCIM/Camera /sdcard/Pictures/Trips /sdcard/Pictures/Family
 for i in 1 2 3 4; do adb push photos/img_$i.png /sdcard/DCIM/Camera/; done
 for i in 5 6 7 8; do adb push photos/img_$i.png /sdcard/Pictures/Trips/; done
 for i in 9 10 11 12; do adb push photos/img_$i.png /sdcard/Pictures/Family/; done
-for f in /sdcard/DCIM/Camera/*.png /sdcard/Pictures/Trips/*.png /sdcard/Pictures/Family/*.png; do
+adb shell mkdir -p /sdcard/Pictures/People
+for f in faces/*.jpg; do adb push $f /sdcard/Pictures/People/; done
+for f in /sdcard/Pictures/People/*.jpg /sdcard/DCIM/Camera/*.png /sdcard/Pictures/Trips/*.png /sdcard/Pictures/Family/*.png; do
   adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "file://$f" >/dev/null
 done
 for p in android.permission.READ_MEDIA_IMAGES android.permission.READ_MEDIA_VIDEO android.permission.POST_NOTIFICATIONS; do
@@ -87,12 +89,15 @@ shoot_theme() {
   adb shell input keyevent KEYCODE_BACK; sleep 3; adb exec-out screencap -p > shots/${NAME}_7_back_to_folder.png
   adb shell input keyevent KEYCODE_BACK; sleep 3; adb exec-out screencap -p > shots/${NAME}_8_back_to_albums.png
   tap_text Pictures; sleep 4
-  adb shell input tap 180 420; sleep 8; adb exec-out screencap -p > shots/${NAME}_9_pictures_viewer.png
+  adb shell input tap 400 300; sleep 8; adb exec-out screencap -p > shots/${NAME}_9_pictures_viewer.png
+  adb shell dumpsys activity activities | grep -E 'topResumedActivity' > shots/${NAME}_top_pv.txt || true
   adb shell input keyevent KEYCODE_BACK; sleep 3; adb exec-out screencap -p > shots/${NAME}_10_pictures_back.png
   adb shell dumpsys activity activities | grep -E 'topResumedActivity' > shots/${NAME}_top_end.txt || true
   adb shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n $PKG/org.fossify.gallery.activities.SplashActivity.Green >/dev/null; sleep 6
   tap_text People; sleep 3
-  tap_text "Scan photos"; sleep 20; adb exec-out screencap -p > shots/${NAME}_11_people_scan.png
+  tap_text "Scan photos"; sleep 45; adb exec-out screencap -p > shots/${NAME}_11_people_scan.png
+  tap_text "Person 1"; sleep 5; adb exec-out screencap -p > shots/${NAME}_12_person.png
+  adb logcat -d -s FaceScan:I > shots/${NAME}_facescan.txt || true
   adb logcat -d -s AndroidRuntime:E > shots/${NAME}_rt.txt || true
   adb logcat -d -b crash > shots/${NAME}_crash.txt || true
   adb logcat -d -s ActivityTaskManager:I ActivityManager:I AndroidRuntime:E DEBUG:F libc:F > shots/${NAME}_am.txt || true

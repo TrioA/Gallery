@@ -5,6 +5,8 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Matrix
 import android.graphics.Paint
+import android.util.Log
+import android.os.SystemClock
 import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.google.mediapipe.tasks.core.BaseOptions
 import com.google.mediapipe.tasks.vision.core.RunningMode
@@ -49,7 +51,10 @@ class FaceEngine(context: Context) : Closeable {
     }
 
     fun process(bitmap: Bitmap): List<Found> {
+        val t0 = SystemClock.elapsedRealtime()
         val result = detector.detect(BitmapImageBuilder(bitmap).build())
+        val detectMs = SystemClock.elapsedRealtime() - t0
+        var embedMs = 0L
         val w = bitmap.width.toFloat()
         val h = bitmap.height.toFloat()
         val out = mutableListOf<Found>()
@@ -70,12 +75,15 @@ class FaceEngine(context: Context) : Closeable {
             if (!m.setPolyToPoly(src, 0, dst, 0, 3)) continue
             val aligned = Bitmap.createBitmap(INPUT, INPUT, Bitmap.Config.ARGB_8888)
             Canvas(aligned).drawBitmap(bitmap, m, Paint(Paint.FILTER_BITMAP_FLAG))
+            val t1 = SystemClock.elapsedRealtime()
             val emb = embed(aligned)
+            embedMs += SystemClock.elapsedRealtime() - t1
             val baos = ByteArrayOutputStream()
             aligned.compress(Bitmap.CompressFormat.JPEG, 85, baos)
             aligned.recycle()
             out.add(Found(box.left / w, box.top / h, box.right / w, box.bottom / h, emb, baos.toByteArray()))
         }
+        Log.i("FaceScan", "bitmap ${bitmap.width}x${bitmap.height} detect=${detectMs}ms faces=${out.size} embed_total=${embedMs}ms")
         return out
     }
 

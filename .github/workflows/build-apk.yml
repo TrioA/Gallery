@@ -51,12 +51,14 @@ jobs:
 
             - name: Show APK signer
               run: |
-                  APK=$(ls app/build/outputs/apk/foss/debug/*debug.apk | head -1)
                   BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
                   echo "build-tools: $BT"
-                  "$BT"/apksigner verify --verbose --print-certs "$APK" 2>&1 | tee apksigner.txt
-                  "$BT"/aapt2 dump badging "$APK" 2>&1 | grep -E "^package:|sdkVersion|targetSdk|native-code" | tee badging.txt
-                  ls -l "$APK"
+                  for APK in app/build/outputs/apk/foss/debug/*debug.apk; do
+                    echo "== $APK"
+                    "$BT"/apksigner verify --verbose --print-certs "$APK" 2>&1 | grep -E "Verifies|v2 scheme|Number of signers|certificate SHA-256" || true
+                    "$BT"/aapt2 dump badging "$APK" 2>&1 | grep -E "^package:|native-code" || true
+                    ls -l "$APK"
+                  done
 
             - uses: actions/upload-artifact@v4
               with:
@@ -83,6 +85,14 @@ jobs:
                   echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
                   sudo udevadm control --reload-rules
                   sudo udevadm trigger --name-match=kvm
+            - name: Fetch public-domain portrait test photos (NASA via Wikimedia Commons)
+              run: |
+                  mkdir -p faces
+                  UA="TrioA-Gallery-CI/1.0 (personal fork test)"
+                  curl -fL --retry 3 -A "$UA" -o faces/armstrong_1.jpg "https://commons.wikimedia.org/wiki/Special:FilePath/Neil_Armstrong_pose.jpg?width=1200"
+                  curl -fL --retry 3 -A "$UA" -o faces/aldrin_1.jpg "https://commons.wikimedia.org/wiki/Special:FilePath/Buzz_Aldrin.jpg?width=1200"
+                  python3 -c "from PIL import Image; a=Image.open('faces/armstrong_1.jpg'); a.resize((a.width*2//3,a.height*2//3)).save('faces/armstrong_2.jpg',quality=80)" || cp faces/armstrong_1.jpg faces/armstrong_2.jpg
+                  ls -l faces
             - name: Make test photos
               run: python3 .github/scripts/make_photos.py
             - name: Run on emulator and take screenshots
