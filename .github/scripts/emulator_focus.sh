@@ -80,7 +80,7 @@ PY
 open_people() { launch; tap_id tab_people; sleep 3; }
 scroll_tap() {
   for i in 1 2 3 4 5 6; do
-    if has "$1"; then tap_text "$1"; return; fi
+    if tap_text "$1"; then return 0; fi
     adb shell input swipe 500 1650 500 600 350; sleep 1
   done
   echo "FAIL: target not visible after scrolling: $1" >> $R
@@ -88,6 +88,7 @@ scroll_tap() {
 
 open_photo() { # file name
   ID=$(adb shell content query --uri content://media/external/images/media --projection _id:_display_name | grep "_display_name=$1" | head -1 | sed 's/.*_id=\([0-9]*\).*/\1/')
+  if [ -z "$ID" ]; then echo "FAIL: no MediaStore id for $1; refusing to open wrong photo" >> $R; return 1; fi
   adb shell am start -n $PKG/org.fossify.gallery.activities.ViewPagerActivity -a android.intent.action.VIEW -t image/jpeg -d content://media/external/images/media/$ID >/dev/null; sleep 5
 }
 sheet() { adb shell input swipe 540 1700 540 600 150; sleep 3; }
@@ -612,7 +613,8 @@ need "no crash in logcat during upgrade test" 21 test ! -s shots/rt2.txt
 adb shell am force-stop $PKG; sleep 1
 adb push shots/db_devcancel/people.db /data/local/tmp/people.db >/dev/null
 adb shell "run-as $PKG sh -c 'mkdir -p databases; cp /data/local/tmp/people.db databases/people.db; rm -f databases/people.db-wal databases/people.db-shm files/dbg_disable_fullrange; echo 0 > files/dbg_stage_delay_ms'"
-adb shell cp /sdcard/Pictures/People/limit_small.jpg /sdcard/Pictures/People/fallback_small.jpg
+adb push focus/limit_small.jpg /sdcard/Pictures/People/fallback_small.jpg >/dev/null
+need "fallback fixture exists on device" 25file adb shell test -s /sdcard/Pictures/People/fallback_small.jpg
 adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Pictures/People/fallback_small.jpg >/dev/null
 adb logcat -c
 open_people_exact
