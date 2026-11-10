@@ -43,6 +43,8 @@ jobs:
                   curl -fL --retry 3 -o app/src/main/assets/blaze_face_full_range.tflite \
                     https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_full_range/float16/1/blaze_face_full_range.tflite
                   echo "3698b18f063835bc609069ef052228fbe86d9c9a6dc8dcb7c7c2d69aed2b181b  app/src/main/assets/blaze_face_full_range.tflite" | sha256sum -c -
+                  echo "b4578f35940bf5a1a655214a1cce5cab13eba73c1297cd78e1a04c2380b0152f  app/src/main/assets/blaze_face_short_range.tflite" | sha256sum -c -
+                  echo "56c854e363b7ae99622deed87e27d95bda239b87dd145be565a71ed64d72ae46  app/src/main/assets/auraface_glintr100.tflite" | sha256sum -c -
                   sha256sum app/src/main/assets/*.tflite
                   ls -l app/src/main/assets
 
