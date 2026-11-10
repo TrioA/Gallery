@@ -70,6 +70,10 @@ android {
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
+            if (hasSigningVars()) {
+                // Personal build: sign debug with a stable key so APKs update in place.
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
         release {
             isMinifyEnabled = true
