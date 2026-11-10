@@ -83,7 +83,9 @@ class PeopleActivity : SimpleActivity() {
         binding.peopleSelectBar.visibility = if (on) View.VISIBLE else View.GONE
         binding.peopleMerge.text = "Merge ${selected.size} into one"
         val primary = getProperPrimaryColor()
-        for (t in listOf(binding.peopleMerge, binding.peopleSimilar, binding.peopleCancelSelect)) t.setTextColor(primary)
+        for (t in listOf(binding.peopleSimilar, binding.peopleCancelSelect)) t.setTextColor(primary)
+        binding.peopleMerge.background = GradientDrawable().apply { cornerRadius = 100f; setColor(primary) }
+        binding.peopleMerge.setTextColor(primary.getContrastColor())
     }
 
     private fun confirmMerge() {
@@ -140,10 +142,13 @@ class PeopleActivity : SimpleActivity() {
             val v = LayoutInflater.from(parent.context).inflate(R.layout.item_person, parent, false)
             val face = v.findViewById<ImageView>(R.id.person_face)
             face.outlineProvider = ViewOutlineProvider.BACKGROUND
+            // Ring in the user's chosen theme colour (adjustable in Fossify settings, nothing hardcoded).
             face.background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
                 setColor(0x22888888)
+                setStroke(5, getProperPrimaryColor())
             }
+            face.setPadding(9, 9, 9, 9)
             face.clipToOutline = true
             return Holder(v)
         }
@@ -168,7 +173,10 @@ class PeopleActivity : SimpleActivity() {
                 cornerRadius = 24f
                 setStroke(6, getProperPrimaryColor())
                 setColor(0x22888888)
-            } else null
+            } else GradientDrawable().apply {
+                cornerRadius = 24f
+                setColor(0x14888888)
+            }
             holder.itemView.setOnLongClickListener {
                 selected.add(p.id); lastSelected = p.id
                 updateSelectBar(); notifyDataSetChanged(); true

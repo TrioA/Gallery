@@ -217,6 +217,23 @@ need "originals byte-identical after all of the above" 13 diff -q shots/md5_befo
 adb logcat -d -s AndroidRuntime:E > shots/rt.txt
 need "no crash in logcat" 14 test ! -s shots/rt.txt
 
+# 7b. process killed in the middle of a scan: no corruption, scan resumes and finishes
+adb shell am force-stop $PKG; sleep 1
+adb shell "run-as $PKG sh -c 'rm -f databases/people.db databases/people.db-wal databases/people.db-shm databases/people.db-journal'"
+open_people; tap_text "Scan photos"; sleep 3
+adb shell am force-stop $PKG; sleep 2
+dbsnap killed > shots/db_killed.txt; cat shots/db_killed.txt >> $R
+python3 - shots/db_killed/people.db >> $R <<'PY'
+import sqlite3,sys
+c=sqlite3.connect(sys.argv[1])
+ok=c.execute("pragma integrity_check").fetchone()[0]
+orph=c.execute("select count(*) from faces f left join people p on p.id=f.person_id where p.id is null").fetchone()[0]
+nf=c.execute("select count(*) from faces").fetchone()[0]; ns=c.execute("select count(*) from scanned").fetchone()[0]
+print(("PASS: " if ok=="ok" and orph==0 else "FAIL: ")+"scan killed mid-way: DB integrity %s, orphan faces %d, %d faces from %d scanned photos (partial progress kept)"%(ok,orph,nf,ns))
+PY
+open_people; tap_text "Scan photos"; wait_scan; shot 19_after_kill_resume
+soft "scan killed mid-way, then resumed: same final result (2 people, 9 faces)" 19 has "2 people, 9 faces"
+
 # 8. upgrade from a populated v1 database (the schema the delivered 1015/1022 builds use)
 adb shell am force-stop $PKG
 adb shell 'rm -f /sdcard/Pictures/People/*.jpg'
