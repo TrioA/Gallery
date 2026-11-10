@@ -316,6 +316,54 @@ dbsnap dev_during > /dev/null; C1=$(dbcounts dev_during); sleep 8; C2=$(dbcounts
 [ "$C1" = "0 0 0" ] && [ "$C2" = "0 0 0" ] && pass "reset during a running scan: stays empty, nothing repopulated ($C1 then $C2)" || echo "FAIL: reset during scan left $C1 then $C2" >> $R
 shot 20e_reset_during_scan
 
+# 7e. deterministic in-flight evidence: a test-only delay file makes every photo take >= 3 s per stage
+setdelay() { adb shell "run-as $PKG sh -c 'mkdir -p files; echo $1 > files/dbg_stage_delay_ms'"; }
+wipedb() { adb shell am force-stop $PKG; sleep 1; adb shell "run-as $PKG sh -c 'rm -f databases/people.db databases/people.db-wal databases/people.db-shm databases/people.db-journal'"; }
+phrase() { dump; XY=$(python3 - <<'PY'
+import re,xml.etree.ElementTree as ET
+for n in ET.parse('/tmp/ui.xml').iter('node'):
+    if n.get('class','').endswith('EditText'):
+        m=re.findall(r'\d+',n.get('bounds'));x1,y1,x2,y2=map(int,m);print((x1+x2)//2,(y1+y2)//2);break
+PY
+); adb shell input tap $XY; adb shell input text "DELETE%sALL%sPEOPLE%sDATA"; sleep 1; }
+adb shell content query --uri content://com.android.contacts/contacts --projection display_name > shots/contacts_e_before.txt
+adb shell 'md5sum /sdcard/Pictures/People/*.jpg' > shots/md5_e_before.txt
+# (a) Stop lands inside a photo: that photo must not be recorded as scanned
+wipedb; setdelay 3000; adb logcat -c
+open_people; tap_text "Scan photos"; sleep 5; has "Scanning" && pass "scan is running when Stop is pressed (status shows Scanning)" || echo "FAIL: scan not running before Stop" >> $R
+tap_text "Stop scanning"; sleep 6
+adb logcat -d -s FaceScan:W > shots/stop_inflight_log.txt
+IP=$(grep -o "not recorded as scanned: .*" shots/stop_inflight_log.txt | head -1 | sed 's/not recorded as scanned: //')
+[ -n "$IP" ] && pass "Stop inside a photo was detected: interrupted photo logged ($(basename $IP))" || echo "FAIL: no interrupted-photo log after Stop" >> $R
+dbsnap stopinflight > /dev/null
+python3 - shots/db_stopinflight/people.db "$IP" >> $R <<'PY'
+import sqlite3,sys
+c=sqlite3.connect(sys.argv[1]); p=sys.argv[2]
+n=c.execute("select count(*) from scanned where path=?",(p,)).fetchone()[0] if p else -1
+print(("PASS: " if n==0 else "FAIL: ")+"interrupted photo is NOT in the scanned table (count %d), so it will be scanned again"%n)
+PY
+setdelay 0; adb shell am force-stop $PKG
+open_people; tap_text "Scan photos"; wait_scan; shot 19d_after_interrupt_rescan
+soft "after interrupted-photo Stop, rescan completes: 2 people, 9 faces" 19d has "2 people, 9 faces"
+# (b) reset while a photo is definitely in flight
+wipedb; setdelay 3000; adb logcat -c
+open_people; tap_text "Scan photos"; sleep 4
+open_dev; phrase; has "Scanning" >/dev/null; tap_text ERASE; sleep 1
+adb logcat -d -s FaceScan:W > shots/reset_inflight_log0.txt
+sleep 10
+adb logcat -d -s FaceScan:W > shots/reset_inflight_log.txt
+grep -q "abort: reset happened during scan" shots/reset_inflight_log.txt && pass "in-flight scan saw the reset and wrote nothing more (abort logged)" || echo "FAIL: no abort log after reset during scan" >> $R
+adb shell am force-stop $PKG; sleep 1
+C=$(dbcounts resetinflight); [ "$C" = "0 0 0" ] && pass "reset with a photo in flight: 0 people, 0 faces, 0 scanned 10 s later ($C)" || echo "FAIL: in-flight reset left $C" >> $R
+setdelay 0
+open_people; tap_text "Scan photos"; wait_scan
+soft "after reset-in-flight, fresh scan: 2 people, 9 faces" 19e has "2 people, 9 faces"
+# originals and phone contacts untouched by all resets above
+adb shell content query --uri content://com.android.contacts/contacts --projection display_name > shots/contacts_e_after.txt
+adb shell 'md5sum /sdcard/Pictures/People/*.jpg' > shots/md5_e_after.txt
+diff -q shots/md5_e_before.txt shots/md5_e_after.txt >/dev/null && pass "photos byte-identical (md5) before and after the resets" || echo "FAIL: photo hashes changed" >> $R
+diff -q shots/contacts_e_before.txt shots/contacts_e_after.txt >/dev/null && grep -q Test_Person shots/contacts_e_after.txt && pass "phone contact list unchanged by reset (Test_Person still present)" || echo "FAIL: contacts changed" >> $R
+
 # 8. upgrade from a populated v1 database (the schema the delivered 1015/1022 builds use)
 adb shell am force-stop $PKG
 adb shell 'rm -f /sdcard/Pictures/People/*.jpg'

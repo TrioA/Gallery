@@ -23,6 +23,11 @@ import java.nio.ByteOrder
  * The embedder is isolated here so a different model can be swapped in.
  */
 class FaceEngine(context: Context, private val minConfidence: Float = 0.6f) : Closeable {
+    /** Test-only: a file in the app's private dir (writable only through run-as on debug builds) slows every stage, so tests can hit a photo mid-way deterministically. */
+    private val debugStageDelayMs: Long = try {
+        java.io.File(context.applicationContext.filesDir, "dbg_stage_delay_ms").readText().trim().toLong()
+    } catch (_: Exception) { 0L }
+
     /** Checked between tiles so Stop is honoured mid-photo. */
     @Volatile var shouldStop: () -> Boolean = { false }
     /** True if the last photo was cut short by Stop, so the scanner must not record it as fully scanned. */
@@ -105,6 +110,7 @@ class FaceEngine(context: Context, private val minConfidence: Float = 0.6f) : Cl
         val all = mutableListOf<Cand>()
         interrupted = false
         detectIn(bitmap, 0, 0, 0f, all)
+        if (debugStageDelayMs > 0) { Thread.sleep(debugStageDelayMs); if (shouldStop()) interrupted = true }
         val m = minOf(bitmap.width, bitmap.height)
         var tiles = 0
         val t0 = SystemClock.elapsedRealtime()
@@ -126,7 +132,8 @@ class FaceEngine(context: Context, private val minConfidence: Float = 0.6f) : Cl
             // Tile-only detections must be confident: weak ones on tiles are mostly face-like patches.
             val tileMinScore = if (intensive) minConfidence else TILE_MIN_SCORE
             for ((x, y) in pts.distinct()) {
-                if (shouldStop()) { interrupted = true; break }
+                if (interrupted || shouldStop()) { interrupted = true; break }
+                if (debugStageDelayMs > 0) Thread.sleep(debugStageDelayMs)
                 val tile = Bitmap.createBitmap(bitmap, x, y, s, s)
                 detectIn(tile, x, y, tileMinScore, all)
                 tile.recycle()

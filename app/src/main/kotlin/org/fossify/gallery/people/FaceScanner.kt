@@ -118,7 +118,8 @@ object FaceScanner {
                 } catch (e: Exception) {
                     // unreadable photo: remember it so we do not retry on every scan
                 }
-                if (PeopleStore.epoch != epoch || engine.interrupted) break
+                if (PeopleStore.epoch != epoch) { android.util.Log.w("FaceScan", "abort: reset happened during scan, nothing more written"); break }
+                if (engine.interrupted) { android.util.Log.w("FaceScan", "interrupted photo not recorded as scanned: ${item.path}"); break }
                 store.markScanned(item.path, item.mtime, found)
                 done++
                 if (done % 3 == 0) notifyChanged()
