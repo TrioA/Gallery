@@ -69,7 +69,23 @@ soft() { # like need, but a failure is recorded and later independent checks sti
   if "$@"; then pass "$d"; else echo "FAIL: $d (independent checks continue)" >> $R; shot "fail_$tag"; fi
 }
 launch() { adb shell am force-stop $PKG; adb shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n $PKG/org.fossify.gallery.activities.SplashActivity.Green >/dev/null; sleep 6; }
-open_people() { launch; tap_text People; sleep 3; }
+tap_id() { dump; XY=$(python3 - "$1" <<'PY'
+import sys,re,xml.etree.ElementTree as ET
+for n in ET.parse('/tmp/ui.xml').iter('node'):
+    if (n.get('resource-id') or '').endswith('/'+sys.argv[1]):
+        a,b,c,d=map(int,re.findall(r'\d+',n.get('bounds')))
+        if c>a and d>b: print((a+c)//2,(b+d)//2);break
+PY
+); [ -n "$XY" ] && adb shell input tap $XY; }
+open_people() { launch; tap_id tab_people; sleep 3; }
+scroll_tap() {
+  for i in 1 2 3 4 5 6; do
+    if has "$1"; then tap_text "$1"; return; fi
+    adb shell input swipe 500 1650 500 600 350; sleep 1
+  done
+  echo "FAIL: target not visible after scrolling: $1" >> $R
+}
+
 open_photo() { # file name
   ID=$(adb shell content query --uri content://media/external/images/media --projection _id:_display_name | grep "_display_name=$1" | head -1 | sed 's/.*_id=\([0-9]*\).*/\1/')
   adb shell am start -n $PKG/org.fossify.gallery.activities.ViewPagerActivity -a android.intent.action.VIEW -t image/jpeg -d content://media/external/images/media/$ID >/dev/null; sleep 5
@@ -375,7 +391,7 @@ for f in faces/armstrong_1.jpg faces/armstrong_2.jpg faces/armstrong_3.jpg; do
   adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "file:///sdcard/Pictures/Regress/$b" >/dev/null
 done
 adb shell 'md5sum /sdcard/Pictures/Regress/*.jpg' > shots/reg_before.txt
-launch; tap_text Albums; sleep 3; shot 21a_albums
+launch; tap_id tab_albums; sleep 3; shot 21a_albums
 tap_text Regress; sleep 3; shot 21b_regress_folder; dump; cp /tmp/ui.xml shots/reg_folder_ui.xml
 python3 - > /tmp/thumbs.txt <<'PY'
 import re,xml.etree.ElementTree as ET
@@ -424,27 +440,27 @@ adb shell cp "$SRC" /sdcard/Pictures/Regress2/seed2.jpg; adb shell cp "$SRC" /sd
 for f in Regress2/seed2.jpg Regress3/move3.jpg; do adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "file:///sdcard/Pictures/$f" >/dev/null; done
 sleep 2
 # copy: Regress (1 file) -> Regress2
-launch; tap_text Albums; sleep 3; tap_text Regress; sleep 3
+launch; tap_id tab_albums; sleep 3; scroll_tap Regress; sleep 3
 XY=$(firstthumb); adb shell input swipe $XY $XY 800 2>/dev/null || adb shell input swipe ${XY% *} ${XY#* } ${XY% *} ${XY#* } 800; sleep 2
 tap_desc "More options"; sleep 2; shot 24a_overflow; dump; cp /tmp/ui.xml shots/ui_overflow.xml
 tap_text "Copy to"; sleep 3; shot 24b_copy_dialog; dump; cp /tmp/ui.xml shots/ui_copy_dialog.xml
-tap_text "Regress2"; sleep 2; tap_text OK; sleep 4; shot 24c_after_copy; dump; cp /tmp/ui.xml shots/ui_after_copy.xml
+scroll_tap "Regress2"; sleep 2; tap_text OK; sleep 4; shot 24c_after_copy; dump; cp /tmp/ui.xml shots/ui_after_copy.xml
 NC=$(adb shell 'ls /sdcard/Pictures/Regress2/*.jpg 2>/dev/null | wc -l' | tr -d '\r ')
 NS=$(adb shell 'ls /sdcard/Pictures/Regress/*.jpg 2>/dev/null | wc -l' | tr -d '\r ')
 [ "$NC" = "2" ] && [ "$NS" = "1" ] && pass "copy: picture copied to Regress2 (2 there), original kept in Regress (1)" || echo "FAIL: copy: Regress2 has $NC (expected 2), Regress has $NS (expected 1)" >> $R
 CP=$(adb shell 'ls /sdcard/Pictures/Regress2/*.jpg' | tr -d '\r' | grep -v seed2 | head -1)
 [ -n "$CP" ] && [ "$(adb shell md5sum "$CP" | cut -d' ' -f1)" = "$(adb shell md5sum "$SRC" | cut -d' ' -f1)" ] && pass "copy: copied file is byte-identical" || echo "FAIL: copy: copied file missing or differs" >> $R
 # move: Regress3 (1 file) -> Regress2
-launch; tap_text Albums; sleep 3; tap_text Regress3; sleep 3
+launch; tap_id tab_albums; sleep 3; scroll_tap Regress3; sleep 3
 XY=$(firstthumb); adb shell input swipe $XY $XY 800 2>/dev/null || adb shell input swipe ${XY% *} ${XY#* } ${XY% *} ${XY#* } 800; sleep 2
 tap_desc "More options"; sleep 2; tap_text "Move to"; sleep 3; shot 24d_move_dialog
-tap_text "Regress2"; sleep 2; tap_text OK; sleep 4; shot 24e_after_move
+scroll_tap "Regress2"; sleep 2; tap_text OK; sleep 4; shot 24e_after_move
 NM=$(adb shell 'ls /sdcard/Pictures/Regress2/*.jpg 2>/dev/null | wc -l' | tr -d '\r ')
 N3=$(adb shell 'ls /sdcard/Pictures/Regress3/*.jpg 2>/dev/null | wc -l' | tr -d '\r ')
 [ "$NM" = "3" ] && [ "$N3" = "0" ] && pass "move: picture moved to Regress2 (3 there), none left in Regress3" || echo "FAIL: move: Regress2 has $NM (expected 3), Regress3 has $N3 (expected 0)" >> $R
 # recycle bin restore of the two pictures deleted in step 21
-launch; tap_text Albums; sleep 3; shot 24f_albums_bin; dump; cp /tmp/ui.xml shots/ui_albums_bin.xml
-if has "Recycle Bin"; then tap_text "Recycle Bin"; sleep 3; shot 24g_bin; dump; cp /tmp/ui.xml shots/ui_bin.xml
+launch; tap_id tab_albums; sleep 3; shot 24f_albums_bin; dump; cp /tmp/ui.xml shots/ui_albums_bin.xml
+if has "Recycle bin"; then tap_text "Recycle bin"; sleep 3; shot 24g_bin; dump; cp /tmp/ui.xml shots/ui_bin.xml
   XY=$(firstthumb); adb shell input swipe $XY $XY 800 2>/dev/null || adb shell input swipe ${XY% *} ${XY#* } ${XY% *} ${XY#* } 800; sleep 2; shot 24h_bin_selected; dump; cp /tmp/ui.xml shots/ui_bin_selected.xml
   tap_desc "More options"; sleep 2; tap_text "Restore selected files"; sleep 4; shot 24i_restored
   NR=$(adb shell 'ls /sdcard/Pictures/Regress/*.jpg 2>/dev/null | wc -l' | tr -d '\r ')
@@ -467,7 +483,7 @@ then return 0; fi; done; return 1; }
 wipedb
 adb push shots/db_devcancel/people.db /data/local/tmp/people.db >/dev/null
 adb shell "run-as $PKG sh -c 'mkdir -p databases; cp /data/local/tmp/people.db databases/people.db; rm -f databases/people.db-wal databases/people.db-shm'"
-open_people_exact() { adb shell am start -n $PKG/org.fossify.gallery.activities.PeopleActivity >/dev/null; sleep 4; }
+open_people_exact() { open_people; }
 open_people_exact
 soft "suggestion test is in PeopleActivity" 23top top_has PeopleActivity
 soft "suggestion test starts with 2 people and 9 faces" 23base has "2 people, 9 faces"
