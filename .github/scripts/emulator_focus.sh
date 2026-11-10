@@ -121,7 +121,9 @@ adb shell am force-stop $PKG; open_photo tiny.jpg; sheet
 need "marked face persists after restart" 08b lacks "No faces found yet"
 
 # 5. contact link
-for pm_ in android.permission.READ_CONTACTS android.permission.WRITE_CONTACTS android.permission.GET_ACCOUNTS; do adb shell pm grant com.android.contacts $pm_; done
+adb shell dumpsys package com.android.contacts > shots/contacts_pkg_before.txt
+for pm_ in $(grep -o 'android\.permission\.[A-Z_]*' shots/contacts_pkg_before.txt | sort -u); do adb shell pm grant com.android.contacts $pm_ >/dev/null 2>&1; done
+adb shell dumpsys package com.android.contacts | grep -E "granted=(true|false)" | grep -E "CONTACTS|PHONE|CALL|ACCOUNTS" > shots/contacts_perms_after.txt
 adb shell content insert --uri content://com.android.contacts/raw_contacts --bind account_type:n: --bind account_name:n:
 adb shell content insert --uri content://com.android.contacts/data --bind raw_contact_id:i:1 --bind mimetype:s:vnd.android.cursor.item/name --bind data1:s:Test_Person --bind data2:s:Test_Person
 adb shell content insert --uri content://com.android.contacts/data --bind raw_contact_id:i:1 --bind mimetype:s:vnd.android.cursor.item/phone_v2 --bind data1:s:5550100 --bind data2:i:2
