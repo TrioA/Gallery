@@ -92,7 +92,7 @@ shoot_theme() {
   adb shell input keyevent KEYCODE_BACK; sleep 3; adb exec-out screencap -p > shots/${NAME}_7_back_to_folder.png
   adb shell input keyevent KEYCODE_BACK; sleep 3; adb exec-out screencap -p > shots/${NAME}_8_back_to_albums.png
   tap_text Pictures; sleep 4
-  adb shell input tap 400 300; sleep 8; adb exec-out screencap -p > shots/${NAME}_9_pictures_viewer.png
+  adb shell input tap 200 700; sleep 8; adb exec-out screencap -p > shots/${NAME}_9_pictures_viewer.png
   adb shell dumpsys activity activities | grep -E 'topResumedActivity' > shots/${NAME}_top_pv.txt || true
   adb shell input keyevent KEYCODE_BACK; sleep 3; adb exec-out screencap -p > shots/${NAME}_10_pictures_back.png
   adb shell dumpsys activity activities | grep -E 'topResumedActivity' > shots/${NAME}_top_end.txt || true
