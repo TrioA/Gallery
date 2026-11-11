@@ -850,7 +850,7 @@ class MainActivity : SimpleActivity(), DirectoryOperationsListener {
         }
 
         (binding.directoriesRefreshLayout.layoutParams as RelativeLayout.LayoutParams)
-            .addRule(RelativeLayout.BELOW, R.id.directories_switch_searching)
+            .addRule(RelativeLayout.BELOW, R.id.albums_heading)
     }
 
     private fun setupGridLayoutManager() {
@@ -957,9 +957,8 @@ class MainActivity : SimpleActivity(), DirectoryOperationsListener {
         (binding.directoriesGrid.layoutManager as MyGridLayoutManager).spanCount =
             config.dirColumnCnt
         refreshMenuItems()
-        getRecyclerAdapter()?.apply {
-            notifyItemRangeChanged(0, dirs.size)
-        }
+        // Cover captions need room; recreate when switching between cover and dense layouts.
+        setupAdapter(mDirs, forceRecreate = true)
     }
 
     private fun isPickImageIntent(intent: Intent): Boolean {

@@ -128,9 +128,8 @@ class DirectoryAdapter(
     private val isListViewType = config.viewTypeFolders == VIEW_TYPE_LIST
     private var pinnedFolders = config.pinnedFolders
     private var scrollHorizontally = config.scrollHorizontally
-    private val useCoverCards = !isListViewType && !scrollHorizontally && folderStyleForCover(config.folderStyle) && config.dirColumnCnt <= 2
+    private val useCoverCards = !isListViewType && !scrollHorizontally && config.folderStyle == FOLDER_STYLE_ROUNDED_CORNERS && config.dirColumnCnt <= 2
 
-    private fun folderStyleForCover(style: Int) = style == FOLDER_STYLE_ROUNDED_CORNERS
     private var animateGifs = config.animateGifs
     private var cropThumbnails = config.cropThumbnails
     private var groupDirectSubfolders = config.groupDirectSubfolders
